@@ -15,9 +15,12 @@ pub struct OpenClawConfig {
     pub webhook_url: String,
     /// Bearer token for OpenClaw authentication.
     pub token: String,
+    /// OPC API key for the agent, so OpenClaw can call back to submit results.
+    /// Generate one via POST /api/agents/{id}/keys and paste the opc_... key here.
+    pub opc_api_key: String,
     /// Timeout in seconds (maps to OpenClaw's timeoutSeconds).
     pub timeout_secs: Option<u64>,
-    /// Whether OpenClaw should deliver the result to a messaging channel.
+    /// Whether OpenClaw should also deliver the result to a messaging channel.
     pub deliver: Option<bool>,
     /// Target messaging channel (e.g. "slack", "telegram").
     pub channel: Option<String>,
@@ -33,8 +36,7 @@ pub struct OpenClawConfig {
 struct OpenClawPayload {
     message: String,
     name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    deliver: Option<bool>,
+    deliver: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     channel: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -67,18 +69,20 @@ impl OpenClawAdapter {
         }
     }
 
-    fn build_prompt(context: &AgentTaskContext) -> String {
+    fn build_prompt(context: &AgentTaskContext, config: &OpenClawConfig) -> String {
         let mut prompt = format!(
-            "You are agent '{}' working on task: {}\n\n",
-            context.agent.name, context.issue.title
+            "You are agent '{}' working on a task in the OPC (One Person Company) system.\n\n",
+            context.agent.name
         );
 
+        prompt.push_str(&format!("## Task: {}\n\n", context.issue.title));
+
         if let Some(desc) = &context.issue.description {
-            prompt.push_str(&format!("Task description:\n{}\n\n", desc));
+            prompt.push_str(&format!("## Description\n{}\n\n", desc));
         }
 
         if !context.parent_chain.is_empty() {
-            prompt.push_str("Parent task context:\n");
+            prompt.push_str("## Parent task context\n");
             for parent in &context.parent_chain {
                 prompt.push_str(&format!(
                     "- {}: {}\n",
@@ -90,7 +94,7 @@ impl OpenClawAdapter {
         }
 
         if !context.comments.is_empty() {
-            prompt.push_str("Comment thread:\n");
+            prompt.push_str("## Conversation history\n");
             for comment in &context.comments {
                 prompt.push_str(&format!(
                     "[{}] {}: {}\n",
@@ -101,10 +105,20 @@ impl OpenClawAdapter {
         }
 
         if context.trigger == "changes_requested" {
-            prompt.push_str("IMPORTANT: The human reviewer has requested changes. Please review the comments above and address their feedback.\n\n");
+            prompt.push_str("**IMPORTANT: The human reviewer has requested changes. Review the conversation above and address their feedback.**\n\n");
         }
 
-        prompt.push_str("Complete the task and provide a summary of what you did.\n");
+        prompt.push_str("## Instructions\n\n");
+        prompt.push_str("1. Complete the task described above.\n");
+        prompt.push_str("2. Write a clear summary of what you did.\n");
+        prompt.push_str("3. Submit your results back to the OPC system by running the following curl command. Replace SUMMARY with your actual summary (keep it concise, escape quotes):\n\n");
+
+        prompt.push_str(&format!(
+            "```bash\ncurl -X POST {}/api/agent/issues/{}/submit \\\n  -H 'Authorization: Bearer {}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{{\"summary\": \"SUMMARY\", \"artifacts\": null}}'\n```\n\n",
+            context.api_base_url, context.issue.id, config.opc_api_key
+        ));
+
+        prompt.push_str("You MUST run this curl command after completing the task. This submits your work for human review. Without this step, the task remains incomplete in the system.\n");
 
         prompt
     }
@@ -115,13 +129,13 @@ impl AgentAdapter for OpenClawAdapter {
     async fn invoke(&self, context: AgentTaskContext) -> Result<AgentResponse> {
         *self.running.lock().await = true;
 
-        let prompt = Self::build_prompt(&context);
+        let prompt = Self::build_prompt(&context, &self.config);
         let issue_title = context.issue.title.clone();
 
         let payload = OpenClawPayload {
             message: prompt,
             name: issue_title.clone(),
-            deliver: self.config.deliver,
+            deliver: self.config.deliver.unwrap_or(false),
             channel: self.config.channel.clone(),
             to: self.config.to.clone(),
             model: self.config.model.clone(),
@@ -142,10 +156,10 @@ impl AgentAdapter for OpenClawAdapter {
             Ok(resp) => {
                 if resp.status().is_success() {
                     Ok(AgentResponse {
-                        status: AgentResponseStatus::NeedsApproval,
+                        status: AgentResponseStatus::Dispatched,
                         summary: format!(
-                            "Task '{}' dispatched to OpenClaw agent at {}",
-                            issue_title, self.config.webhook_url
+                            "Task '{}' dispatched to OpenClaw. Waiting for OpenClaw to process and submit results back.",
+                            issue_title
                         ),
                         artifacts: vec![],
                         cost: None,
