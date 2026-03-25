@@ -1,6 +1,7 @@
 use crate::adapter::{AgentAdapter, AgentTaskContext};
 use crate::claude_code::{ClaudeCodeAdapter, ClaudeCodeConfig};
 use crate::http_adapter::{HttpAdapter, HttpAdapterConfig};
+use crate::openclaw::{OpenClawAdapter, OpenClawConfig};
 use anyhow::{bail, Result};
 use opc_core::domain::{Agent, CreateApprovalRequest, OpcEvent};
 use opc_core::events::EventBus;
@@ -176,6 +177,10 @@ fn create_adapter(agent: &Agent) -> Result<Box<dyn AgentAdapter>> {
         "claude_code" => {
             let config: ClaudeCodeConfig = serde_json::from_value(agent.adapter_config.clone())?;
             Ok(Box::new(ClaudeCodeAdapter::new(config)))
+        }
+        "openclaw" => {
+            let config: OpenClawConfig = serde_json::from_value(agent.adapter_config.clone())?;
+            Ok(Box::new(OpenClawAdapter::new(config)))
         }
         other => bail!("Unsupported adapter type: {}", other),
     }

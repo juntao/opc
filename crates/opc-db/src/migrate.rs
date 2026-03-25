@@ -17,10 +17,16 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    let migrations = vec![(
-        "001_initial",
-        include_str!("../../../migrations/001_initial.sql"),
-    )];
+    let migrations = vec![
+        (
+            "001_initial",
+            include_str!("../../../migrations/001_initial.sql"),
+        ),
+        (
+            "002_add_openclaw_adapter",
+            include_str!("../../../migrations/002_add_openclaw_adapter.sql"),
+        ),
+    ];
 
     for (name, sql) in migrations {
         let applied: bool =
