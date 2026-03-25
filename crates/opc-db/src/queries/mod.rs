@@ -6,5 +6,6 @@ pub mod companies;
 pub mod cost_events;
 pub mod heartbeats;
 pub mod issues;
+pub mod project_updates;
 pub mod projects;
 pub mod users;

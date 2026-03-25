@@ -52,12 +52,32 @@ pub async fn api_create(
     Json(mut input): Json<CreateIssue>,
 ) -> Result<Json<Issue>, AppError> {
     input.company_id = state.company_id;
+
+    // Check if the project is in draft status
+    let project_is_draft = if let Some(project_id) = input.project_id {
+        let project = queries::projects::get_project(&state.pool, project_id).await?;
+        project.is_some_and(|p| p.status == "draft")
+    } else {
+        false
+    };
+
     let issue = queries::issues::create_issue(&state.pool, &input).await?;
 
     state.event_bus.publish(OpcEvent::IssueCreated {
         issue_id: issue.id,
         company_id: state.company_id,
     });
+
+    if project_is_draft {
+        // Force backlog — agents should not be triggered for draft projects
+        if issue.status != "backlog" {
+            queries::issues::update_issue_status(&state.pool, issue.id, "backlog").await?;
+        }
+        let issue = queries::issues::get_issue(&state.pool, issue.id)
+            .await?
+            .unwrap_or(issue);
+        return Ok(Json(issue));
+    }
 
     if let Some(assignee_id) = issue.assignee_id {
         state.event_bus.publish(OpcEvent::IssueAssigned {
@@ -97,21 +117,40 @@ pub async fn api_assign(
     Path(id): Path<Uuid>,
     Json(input): Json<AssignInput>,
 ) -> Result<Json<Option<Issue>>, AppError> {
+    // Check if the issue's project is in draft status
+    let issue = queries::issues::get_issue(&state.pool, id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Issue not found"))?;
+    let project_is_draft = if let Some(project_id) = issue.project_id {
+        let project = queries::projects::get_project(&state.pool, project_id).await?;
+        project.is_some_and(|p| p.status == "draft")
+    } else {
+        false
+    };
+
+    let status = if project_is_draft {
+        "backlog".to_string()
+    } else {
+        "todo".to_string()
+    };
+
     let update = UpdateIssue {
         title: None,
         description: None,
-        status: Some("todo".to_string()),
+        status: Some(status),
         priority: None,
         assignee_id: Some(input.assignee_id),
         project_id: None,
     };
     let issue = queries::issues::update_issue(&state.pool, id, &update).await?;
 
-    state.event_bus.publish(OpcEvent::IssueAssigned {
-        issue_id: id,
-        agent_id: input.assignee_id,
-        company_id: state.company_id,
-    });
+    if !project_is_draft {
+        state.event_bus.publish(OpcEvent::IssueAssigned {
+            issue_id: id,
+            agent_id: input.assignee_id,
+            company_id: state.company_id,
+        });
+    }
 
     Ok(Json(issue))
 }

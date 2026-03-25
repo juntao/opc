@@ -131,6 +131,10 @@ fn agent_api_routes(state: AppState) -> Router<AppState> {
         .route("/issues", post(routes::agents::agent_create_issue))
         .route("/projects", post(routes::agents::agent_create_project))
         .route("/agents", get(routes::agents::agent_list_agents))
+        .route(
+            "/projects/{id}/updates",
+            post(routes::agents::agent_post_project_update),
+        )
         .layer(axum_mw::from_fn_with_state(state, middleware::agent_auth))
 }
 
@@ -147,6 +151,7 @@ fn authenticated_routes(state: AppState) -> Router<AppState> {
         .route("/approvals", get(routes::pages::approvals_page))
         .route("/approvals/{id}", get(routes::pages::approval_detail_page))
         .route("/projects", get(routes::pages::projects_page))
+        .route("/projects/{id}", get(routes::pages::project_detail_page))
         // API
         .route(
             "/api/agents",
@@ -202,7 +207,13 @@ fn authenticated_routes(state: AppState) -> Router<AppState> {
         )
         .route(
             "/api/projects/{id}",
-            get(routes::projects::api_get).put(routes::projects::api_update),
+            get(routes::projects::api_get)
+                .put(routes::projects::api_update)
+                .delete(routes::projects::api_delete),
+        )
+        .route(
+            "/api/projects/{id}/approve",
+            post(routes::projects::api_approve),
         )
         .layer(axum_mw::from_fn_with_state(state, middleware::board_auth))
 }

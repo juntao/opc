@@ -267,6 +267,30 @@ pub async fn agent_create_project(
     Ok(Json(project))
 }
 
+/// Agent posts a progress update to a project.
+pub async fn agent_post_project_update(
+    State(state): State<AppState>,
+    agent: axum::Extension<Agent>,
+    Path(project_id): Path<Uuid>,
+    Json(input): Json<ProjectUpdateInput>,
+) -> Result<Json<opc_core::domain::ProjectUpdate>, AppError> {
+    let create = opc_core::domain::CreateProjectUpdate {
+        project_id,
+        company_id: agent.company_id,
+        agent_id: agent.id,
+        issue_id: input.issue_id,
+        body: input.body,
+    };
+    let update = queries::project_updates::create_project_update(&state.pool, &create).await?;
+    Ok(Json(update))
+}
+
+#[derive(Deserialize)]
+pub struct ProjectUpdateInput {
+    pub body: String,
+    pub issue_id: Option<Uuid>,
+}
+
 /// Agent lists available colleague agents.
 pub async fn agent_list_agents(
     State(state): State<AppState>,

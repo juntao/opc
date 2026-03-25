@@ -75,6 +75,14 @@ impl OpenClawAdapter {
             context.agent.name
         );
 
+        // Project context
+        if let Some(project) = &context.project {
+            prompt.push_str(&format!("## Project: {}\n\n", project.name));
+            if let Some(desc) = &project.description {
+                prompt.push_str(&format!("{}\n\n", desc));
+            }
+        }
+
         prompt.push_str(&format!("## Task: {}\n\n", context.issue.title));
 
         if let Some(desc) = &context.issue.description {
@@ -126,7 +134,15 @@ impl OpenClawAdapter {
             context.api_base_url, context.issue.id, config.opc_api_key
         ));
 
-        prompt.push_str("You MUST run this curl command after completing the task. This submits your work for human review. Without this step, the task remains incomplete in the system.\n");
+        prompt.push_str("You MUST run this curl command after completing the task. This submits your work for human review. Without this step, the task remains incomplete in the system.\n\n");
+
+        // Project update curl
+        if let Some(project) = &context.project {
+            prompt.push_str(&format!(
+                "After submitting, also post a brief project-level update summarizing your contribution:\n\n```bash\ncurl -X POST {}/api/agent/projects/{}/updates \\\n  -H 'Authorization: Bearer {}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{{\"body\": \"BRIEF_UPDATE\", \"issue_id\": \"{}\"}}'\n```\n",
+                context.api_base_url, project.id, config.opc_api_key, context.issue.id
+            ));
+        }
 
         prompt
     }
