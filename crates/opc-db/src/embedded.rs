@@ -6,11 +6,12 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tracing::info;
 
-/// Default data directory for embedded PostgreSQL.
+/// Default data directory for embedded PostgreSQL: `./db/` relative to the binary.
 fn default_data_dir() -> PathBuf {
-    dirs_next::home_dir()
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".opc")
         .join("db")
 }
 

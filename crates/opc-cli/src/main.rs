@@ -37,9 +37,10 @@ async fn main() -> anyhow::Result<()> {
             println!("Use `cargo run -p opc-server` to start the server directly.");
         }
         Commands::Reset => {
-            let db_dir = dirs_next::home_dir()
+            let db_dir = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.to_path_buf()))
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join(".opc")
                 .join("db");
             if db_dir.exists() {
                 std::fs::remove_dir_all(&db_dir)?;

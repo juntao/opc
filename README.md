@@ -23,7 +23,7 @@ The binary is produced at `target/release/opc-server`.
 ```
 
 On first run, OPC will:
-1. Download and start an embedded PostgreSQL instance (stored in `~/.opc/db/`)
+1. Download and start an embedded PostgreSQL instance (stored in `./db/` next to the binary)
 2. Run database migrations
 3. Create a default company and admin user
 
