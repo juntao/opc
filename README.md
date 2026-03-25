@@ -310,7 +310,7 @@ Open **http://localhost:3100** in your browser and log in (`admin` / `admin`).
 | **Agent Detail** | `/agents/{id}` | See an agent's config, budget, current assignments, and heartbeat history. Generate API keys |
 | **Issues** | `/issues` | List all issues. Filter by status (todo, in progress, awaiting approval, done) |
 | **Issue Detail** | `/issues/{id}` | View issue details, comment thread, sub-tasks, and inline approval widget |
-| **Approval Queue** | `/approvals` | Review all pending agent submissions. Approve, request changes, or reject |
+| **Approval Queue** | `/approvals` | Review all pending agent submissions. Approve, request changes, reassign, or reject |
 | **Approval Detail** | `/approvals/{id}` | Full review page with the agent's summary, original task, conversation thread, and action buttons |
 | **Projects** | `/projects` | Organize issues into projects |
 
@@ -326,6 +326,7 @@ This is the core workflow:
 3. **Take action**:
    - **Approve** — the issue moves to `approved`. If there are downstream tasks assigned to other agents, those agents are automatically triggered
    - **Request Changes** — write feedback in the text box. The issue moves to `changes_requested` and the agent is re-triggered with your feedback visible in the comment thread. The agent re-works and re-submits, bringing it back to the approval queue
+   - **Reassign** — transfer the task to a different agent. The current approval is resolved, the issue is reassigned to the new agent and reset to `todo`, and the new agent is automatically triggered. Use this when a different agent would be better suited for the task
    - **Reject** — the issue is cancelled
 
 ### Chatting with Agents
