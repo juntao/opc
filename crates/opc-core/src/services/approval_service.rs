@@ -12,6 +12,7 @@ pub fn validate_resolution(current_status: &str, new_status: &str) -> Result<()>
         (Some(ApprovalStatus::Pending), Some(ApprovalStatus::Approved)) => Ok(()),
         (Some(ApprovalStatus::Pending), Some(ApprovalStatus::ChangesRequested)) => Ok(()),
         (Some(ApprovalStatus::Pending), Some(ApprovalStatus::Rejected)) => Ok(()),
+        (Some(ApprovalStatus::Pending), Some(ApprovalStatus::Reassigned)) => Ok(()),
         _ => bail!(
             "Cannot resolve approval from '{}' to '{}'",
             current_status,

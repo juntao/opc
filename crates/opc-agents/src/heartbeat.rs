@@ -1,6 +1,7 @@
 use crate::adapter::{AgentAdapter, AgentTaskContext};
 use crate::claude_code::{ClaudeCodeAdapter, ClaudeCodeConfig};
 use crate::http_adapter::{HttpAdapter, HttpAdapterConfig};
+use crate::openclaw::{OpenClawAdapter, OpenClawConfig};
 use anyhow::{bail, Result};
 use opc_core::domain::{Agent, CreateApprovalRequest, OpcEvent};
 use opc_core::events::EventBus;
@@ -112,33 +113,46 @@ pub async fn execute_heartbeat(
                     .await;
             }
 
-            // Always submit for approval (human-in-the-loop)
-            let _ = queries::issues::submit_issue(pool, issue.id, agent.id).await;
+            if matches!(
+                response.status,
+                crate::adapter::AgentResponseStatus::Dispatched
+            ) {
+                // Async agent (e.g. OpenClaw) will call back to submit results.
+                // Leave the issue checked out — the agent's callback will submit.
+                queries::heartbeats::complete_heartbeat_run(pool, run.id, "completed", None)
+                    .await?;
+                info!(
+                    "Agent {} dispatched task '{}' to async agent, awaiting callback",
+                    agent.name, issue.title
+                );
+            } else {
+                // Synchronous agent — auto-submit for approval
+                let _ = queries::issues::submit_issue(pool, issue.id, agent.id).await;
 
-            // Create approval request
-            let artifacts_json = serde_json::to_value(&response.artifacts).unwrap_or_default();
-            let approval_input = CreateApprovalRequest {
-                issue_id: issue.id,
-                company_id: agent.company_id,
-                agent_id: agent.id,
-                summary: response.summary,
-                artifacts: Some(artifacts_json),
-            };
-            let approval = queries::approvals::create_approval(pool, &approval_input).await?;
+                let artifacts_json = serde_json::to_value(&response.artifacts).unwrap_or_default();
+                let approval_input = CreateApprovalRequest {
+                    issue_id: issue.id,
+                    company_id: agent.company_id,
+                    agent_id: agent.id,
+                    summary: response.summary,
+                    artifacts: Some(artifacts_json),
+                };
+                let approval = queries::approvals::create_approval(pool, &approval_input).await?;
 
-            // Emit event
-            event_bus.publish(OpcEvent::ApprovalRequested {
-                approval_id: approval.id,
-                issue_id: issue.id,
-                agent_id: agent.id,
-                company_id: agent.company_id,
-            });
+                event_bus.publish(OpcEvent::ApprovalRequested {
+                    approval_id: approval.id,
+                    issue_id: issue.id,
+                    agent_id: agent.id,
+                    company_id: agent.company_id,
+                });
 
-            queries::heartbeats::complete_heartbeat_run(pool, run.id, "completed", None).await?;
-            info!(
-                "Agent {} completed work on issue {}, awaiting approval",
-                agent.name, issue.title
-            );
+                queries::heartbeats::complete_heartbeat_run(pool, run.id, "completed", None)
+                    .await?;
+                info!(
+                    "Agent {} completed work on issue {}, awaiting approval",
+                    agent.name, issue.title
+                );
+            }
         }
         Err(e) => {
             error!(
@@ -176,6 +190,10 @@ fn create_adapter(agent: &Agent) -> Result<Box<dyn AgentAdapter>> {
         "claude_code" => {
             let config: ClaudeCodeConfig = serde_json::from_value(agent.adapter_config.clone())?;
             Ok(Box::new(ClaudeCodeAdapter::new(config)))
+        }
+        "openclaw" => {
+            let config: OpenClawConfig = serde_json::from_value(agent.adapter_config.clone())?;
+            Ok(Box::new(OpenClawAdapter::new(config)))
         }
         other => bail!("Unsupported adapter type: {}", other),
     }

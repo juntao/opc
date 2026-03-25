@@ -44,6 +44,7 @@ pub enum AdapterType {
     Http,
     ClaudeCode,
     Process,
+    OpenClaw,
 }
 
 impl AdapterType {
@@ -52,6 +53,7 @@ impl AdapterType {
             Self::Http => "http",
             Self::ClaudeCode => "claude_code",
             Self::Process => "process",
+            Self::OpenClaw => "openclaw",
         }
     }
 
@@ -60,6 +62,7 @@ impl AdapterType {
             "http" => Some(Self::Http),
             "claude_code" => Some(Self::ClaudeCode),
             "process" => Some(Self::Process),
+            "openclaw" => Some(Self::OpenClaw),
             _ => None,
         }
     }

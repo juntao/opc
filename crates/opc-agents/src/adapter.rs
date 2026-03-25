@@ -29,6 +29,9 @@ pub enum AgentResponseStatus {
     Completed,
     Failed,
     NeedsApproval,
+    /// Task was dispatched to an async agent (e.g. OpenClaw) that will call back
+    /// to OPC's agent API to submit results. The heartbeat should NOT auto-submit.
+    Dispatched,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

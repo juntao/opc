@@ -161,6 +161,22 @@ pub async fn get_children(pool: &PgPool, parent_id: Uuid) -> sqlx::Result<Vec<Is
         .await
 }
 
+pub async fn reassign_issue(
+    pool: &PgPool,
+    issue_id: Uuid,
+    new_agent_id: Uuid,
+) -> sqlx::Result<Option<Issue>> {
+    let q = format!(
+        "UPDATE issues SET assignee_id = $2, status = 'todo', checked_out_by = NULL, checked_out_at = NULL, updated_at = now() WHERE id = $1 RETURNING {}",
+        ISSUE_COLS
+    );
+    sqlx::query_as::<_, Issue>(&q)
+        .bind(issue_id)
+        .bind(new_agent_id)
+        .fetch_optional(pool)
+        .await
+}
+
 pub async fn update_issue_status(
     pool: &PgPool,
     issue_id: Uuid,
