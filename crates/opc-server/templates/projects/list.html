@@ -20,6 +20,10 @@
                     <label class="form-label">Description</label>
                     <textarea name="description" class="form-textarea" rows="2"></textarea>
                 </div>
+                <div class="form-group">
+                    <label class="form-label">Repository URL</label>
+                    <input type="url" name="repo_url" class="form-input" placeholder="https://github.com/org/repo.git">
+                </div>
                 <button type="submit" class="btn btn-primary btn-sm">Create</button>
             </form>
         </div>
@@ -37,7 +41,7 @@
                 <tbody>
                     {% for project in projects %}
                     <tr>
-                        <td><strong>{{ project.name }}</strong></td>
+                        <td><a href="/projects/{{ project.id }}"><strong>{{ project.name }}</strong></a></td>
                         <td style="color: var(--text-muted);">{% match project.description %}{% when Some with (d) %}{{ d }}{% when None %}-{% endmatch %}</td>
                         <td><span class="badge-status badge-{{ project.status }}">{{ project.status }}</span></td>
                         <td style="color: var(--text-muted);">{{ project.created_at.format("%Y-%m-%d") }}</td>

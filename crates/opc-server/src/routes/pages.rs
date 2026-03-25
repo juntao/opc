@@ -3,7 +3,9 @@ use crate::state::AppState;
 use askama::Template;
 use axum::extract::{Path, State};
 use axum::response::Html;
-use opc_core::domain::{Agent, ApprovalRequest, BoardUser, Issue, IssueComment, Project};
+use opc_core::domain::{
+    Agent, ApprovalRequest, BoardUser, Issue, IssueComment, Project, ProjectUpdate,
+};
 use opc_db::queries;
 use uuid::Uuid;
 
@@ -104,6 +106,16 @@ pub struct ApprovalDetailTemplate {
 pub struct ProjectListTemplate {
     pub user: BoardUser,
     pub projects: Vec<Project>,
+}
+
+#[derive(Template)]
+#[template(path = "projects/detail.html")]
+pub struct ProjectDetailTemplate {
+    pub user: BoardUser,
+    pub project: Project,
+    pub issues: Vec<Issue>,
+    pub agents: Vec<Agent>,
+    pub updates: Vec<ProjectUpdate>,
 }
 
 // --- Page Handlers ---
@@ -301,6 +313,29 @@ pub async fn approval_detail_page(
         issue,
         agent,
         comments,
+    };
+    Ok(Html(template.render().unwrap_or_default()))
+}
+
+pub async fn project_detail_page(
+    State(state): State<AppState>,
+    user: axum::Extension<BoardUser>,
+    Path(id): Path<Uuid>,
+) -> Result<Html<String>, AppError> {
+    let project = queries::projects::get_project(&state.pool, id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Project not found"))?;
+    let issues =
+        queries::issues::list_issues(&state.pool, state.company_id, None, None, Some(id)).await?;
+    let agents = queries::agents::list_agents(&state.pool, state.company_id).await?;
+    let updates = queries::project_updates::list_project_updates(&state.pool, id, 50).await?;
+
+    let template = ProjectDetailTemplate {
+        user: user.0,
+        project,
+        issues,
+        agents,
+        updates,
     };
     Ok(Html(template.render().unwrap_or_default()))
 }

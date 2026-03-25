@@ -40,6 +40,16 @@ impl ClaudeCodeAdapter {
             context.agent.name, context.issue.title
         );
 
+        // Project context
+        if let Some(project) = &context.project {
+            prompt.push_str(&format!("Project context ({}):\n", project.name));
+            if let Some(desc) = &project.description {
+                prompt.push_str(&format!("{}\n\n", desc));
+            } else {
+                prompt.push('\n');
+            }
+        }
+
         if let Some(desc) = &context.issue.description {
             prompt.push_str(&format!("Task description:\n{}\n\n", desc));
         }

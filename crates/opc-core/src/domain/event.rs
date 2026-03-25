@@ -53,6 +53,10 @@ pub enum OpcEvent {
         company_id: Uuid,
         cost_cents: i64,
     },
+    ProjectApproved {
+        project_id: Uuid,
+        company_id: Uuid,
+    },
 }
 
 /// Triggers that can start an agent heartbeat.

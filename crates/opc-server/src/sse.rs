@@ -25,6 +25,7 @@ pub async fn event_stream(
                         OpcEvent::CommentAdded { .. } => "comment_added",
                         OpcEvent::HeartbeatCompleted { .. } => "heartbeat_completed",
                         OpcEvent::CostEvent { .. } => "cost_event",
+                        OpcEvent::ProjectApproved { .. } => "project_approved",
                     };
 
                     if let Ok(data) = serde_json::to_string(&event) {

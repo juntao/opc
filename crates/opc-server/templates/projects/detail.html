@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} - OPC{% endblock %}
+{% block body %}
+<div class="layout">
+    {% let active = "projects" %}
+    {% include "components/sidebar.html" %}
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>{{ project.name }}</h1>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; align-items: center;">
+                    <span class="badge-status badge-{{ project.status }}">{{ project.status }}</span>
+                    {% match project.repo_url %}
+                    {% when Some with (url) %}
+                    <a href="{{ url }}" style="font-size: 0.8rem; color: var(--primary);">{{ url }}</a>
+                    {% when None %}
+                    {% endmatch %}
+                </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                {% if project.status == "draft" %}
+                <button class="btn btn-green"
+                    hx-post="/api/projects/{{ project.id }}/approve"
+                    hx-swap="none"
+                    hx-on::after-request="if(event.detail.successful) location.reload()">
+                    Approve Project
+                </button>
+                {% endif %}
+                <button class="btn btn-red"
+                    hx-delete="/api/projects/{{ project.id }}"
+                    hx-swap="none"
+                    hx-confirm="Delete this project and all its issues?"
+                    hx-on::after-request="if(event.detail.successful) window.location='/projects'">
+                    Delete
+                </button>
+            </div>
+        </div>
+
+        {% match project.description %}
+        {% when Some with (desc) %}
+        <div class="card">
+            <div class="card-title" style="margin-bottom: 0.5rem;">Description</div>
+            <div style="font-size: 0.875rem; white-space: pre-wrap;">{{ desc }}</div>
+        </div>
+        {% when None %}
+        {% endmatch %}
+
+        <div class="card" style="padding: 0;">
+            <div style="padding: 1.25rem; border-bottom: 1px solid var(--border);">
+                <span class="card-title">Issues ({{ issues.len() }})</span>
+            </div>
+            {% if issues.is_empty() %}
+            <div class="empty-state"><p>No issues in this project.</p></div>
+            {% else %}
+            <table>
+                <thead><tr><th>Title</th><th>Status</th><th>Priority</th><th>Assignee</th></tr></thead>
+                <tbody>
+                    {% for issue in issues %}
+                    <tr>
+                        <td><a href="/issues/{{ issue.id }}">{{ issue.title }}</a></td>
+                        <td><span class="badge-status badge-{{ issue.status }}">{{ issue.status }}</span></td>
+                        <td>{{ issue.priority }}</td>
+                        <td>
+                            {% match issue.assignee_id %}
+                            {% when Some with (aid) %}
+                                {% for a in agents %}{% if a.id.to_string() == aid.to_string() %}{{ a.name }}{% endif %}{% endfor %}
+                            {% when None %}-
+                            {% endmatch %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+
+        {% if !updates.is_empty() %}
+        <div class="card">
+            <div class="card-title" style="margin-bottom: 0.5rem;">Agent Updates</div>
+            <div class="comment-thread">
+                {% for update in updates %}
+                <div class="comment comment-agent">
+                    <div class="comment-meta">
+                        Agent &middot; {{ update.created_at.format("%Y-%m-%d %H:%M") }}
+                    </div>
+                    <div class="comment-body">{{ update.body }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}

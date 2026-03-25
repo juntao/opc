@@ -29,3 +29,23 @@ pub struct UpdateProject {
     pub repo_url: Option<String>,
     pub status: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ProjectUpdate {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub company_id: Uuid,
+    pub agent_id: Uuid,
+    pub issue_id: Option<Uuid>,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateProjectUpdate {
+    pub project_id: Uuid,
+    pub company_id: Uuid,
+    pub agent_id: Uuid,
+    pub issue_id: Option<Uuid>,
+    pub body: String,
+}
