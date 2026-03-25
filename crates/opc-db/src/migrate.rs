@@ -30,6 +30,10 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
             "003_add_reassigned_approval_status",
             include_str!("../../../migrations/003_add_reassigned_approval_status.sql"),
         ),
+        (
+            "004_add_issue_repo_url",
+            include_str!("../../../migrations/004_add_issue_repo_url.sql"),
+        ),
     ];
 
     for (name, sql) in migrations {

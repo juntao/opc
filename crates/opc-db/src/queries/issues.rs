@@ -2,7 +2,7 @@ use opc_core::domain::{CreateIssue, Issue, UpdateIssue};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-const ISSUE_COLS: &str = "id, company_id, project_id, parent_issue_id, title, description, status, priority, assignee_id, checked_out_by, checked_out_at, approved_by, approved_at, created_at, updated_at";
+const ISSUE_COLS: &str = "id, company_id, project_id, parent_issue_id, title, description, repo_url, status, priority, assignee_id, checked_out_by, checked_out_at, approved_by, approved_at, created_at, updated_at";
 
 pub async fn list_issues(
     pool: &PgPool,
@@ -34,7 +34,7 @@ pub async fn get_issue(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Issue>> {
 
 pub async fn create_issue(pool: &PgPool, input: &CreateIssue) -> sqlx::Result<Issue> {
     let q = format!(
-        "INSERT INTO issues (company_id, project_id, parent_issue_id, title, description, priority, assignee_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7::UUID IS NOT NULL THEN 'todo' ELSE 'backlog' END) RETURNING {}",
+        "INSERT INTO issues (company_id, project_id, parent_issue_id, title, description, repo_url, priority, assignee_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8::UUID IS NOT NULL THEN 'todo' ELSE 'backlog' END) RETURNING {}",
         ISSUE_COLS
     );
     sqlx::query_as::<_, Issue>(&q)
@@ -43,6 +43,7 @@ pub async fn create_issue(pool: &PgPool, input: &CreateIssue) -> sqlx::Result<Is
         .bind(input.parent_issue_id)
         .bind(&input.title)
         .bind(&input.description)
+        .bind(&input.repo_url)
         .bind(input.priority.as_deref().unwrap_or("medium"))
         .bind(input.assignee_id)
         .fetch_one(pool)
@@ -55,13 +56,14 @@ pub async fn update_issue(
     input: &UpdateIssue,
 ) -> sqlx::Result<Option<Issue>> {
     let q = format!(
-        "UPDATE issues SET title = COALESCE($2, title), description = COALESCE($3, description), status = COALESCE($4, status), priority = COALESCE($5, priority), assignee_id = COALESCE($6, assignee_id), project_id = COALESCE($7, project_id), updated_at = now() WHERE id = $1 RETURNING {}",
+        "UPDATE issues SET title = COALESCE($2, title), description = COALESCE($3, description), repo_url = COALESCE($4, repo_url), status = COALESCE($5, status), priority = COALESCE($6, priority), assignee_id = COALESCE($7, assignee_id), project_id = COALESCE($8, project_id), updated_at = now() WHERE id = $1 RETURNING {}",
         ISSUE_COLS
     );
     sqlx::query_as::<_, Issue>(&q)
         .bind(id)
         .bind(&input.title)
         .bind(&input.description)
+        .bind(&input.repo_url)
         .bind(&input.status)
         .bind(&input.priority)
         .bind(input.assignee_id)
@@ -140,9 +142,9 @@ pub async fn approve_issue(
 
 pub async fn get_parent_chain(pool: &PgPool, issue_id: Uuid) -> sqlx::Result<Vec<Issue>> {
     let q = format!(
-        "WITH RECURSIVE ancestors AS (SELECT {} FROM issues WHERE id = $1 UNION ALL SELECT i.id, i.company_id, i.project_id, i.parent_issue_id, i.title, i.description, i.status, i.priority, i.assignee_id, i.checked_out_by, i.checked_out_at, i.approved_by, i.approved_at, i.created_at, i.updated_at FROM issues i JOIN ancestors a ON a.parent_issue_id = i.id) SELECT {} FROM ancestors WHERE id != $1 ORDER BY created_at ASC",
+        "WITH RECURSIVE ancestors AS (SELECT {} FROM issues WHERE id = $1 UNION ALL SELECT i.id, i.company_id, i.project_id, i.parent_issue_id, i.title, i.description, i.repo_url, i.status, i.priority, i.assignee_id, i.checked_out_by, i.checked_out_at, i.approved_by, i.approved_at, i.created_at, i.updated_at FROM issues i JOIN ancestors a ON a.parent_issue_id = i.id) SELECT {} FROM ancestors WHERE id != $1 ORDER BY created_at ASC",
         ISSUE_COLS,
-        "id, company_id, project_id, parent_issue_id, title, description, status, priority, assignee_id, checked_out_by, checked_out_at, approved_by, approved_at, created_at, updated_at"
+        ISSUE_COLS
     );
     sqlx::query_as::<_, Issue>(&q)
         .bind(issue_id)

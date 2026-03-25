@@ -81,6 +81,14 @@ impl OpenClawAdapter {
             prompt.push_str(&format!("## Description\n{}\n\n", desc));
         }
 
+        if let Some(repo_url) = &context.issue.repo_url {
+            let id_short = &context.issue.id.to_string()[..8];
+            prompt.push_str(&format!(
+                "## Git Repository\n\nClone the repository, create a new branch for this task, do your work, commit, and push the branch.\n\nRepository: {}\n\nSteps:\n1. `git clone {}`\n2. `git checkout -b task/{}`\n3. Do the work\n4. `git add . && git commit -m \"<summary>\" && git push origin task/{}`\n\n",
+                repo_url, repo_url, id_short, id_short
+            ));
+        }
+
         if !context.parent_chain.is_empty() {
             prompt.push_str("## Parent task context\n");
             for parent in &context.parent_chain {

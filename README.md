@@ -115,7 +115,8 @@ curl -X POST http://localhost:3100/api/issues \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Build landing page HTML/CSS",
-    "description": "Clone https://github.com/yourorg/landing-page.git, create a new branch, build a responsive landing page using the approved copy from the parent task, commit, and push the branch.",
+    "description": "Create a responsive landing page using the approved copy from the parent task.",
+    "repo_url": "https://github.com/yourorg/landing-page.git",
     "priority": "high",
     "parent_issue_id": "issue-copy-uuid",
     "assignee_id": "agent-alice-uuid"
@@ -151,7 +152,7 @@ Every step requires your approval. Agents never see each other's pending work. Y
 
 OPC is a **task orchestration and approval system**, not a code hosting platform. When an agent writes code, the files live in the agent's workspace — OPC only captures the agent's text summary of what was done, not the actual files.
 
-**Best practice:** Create a GitHub repo for your project and instruct agents in the task description to clone the repo, create a branch, do the work, and push. This way you can review the actual code diff on GitHub alongside the agent's summary in OPC.
+To bridge this gap, set the `repo_url` field when creating an issue. When `repo_url` is set, OPC automatically appends git workflow instructions to the agent's prompt — telling it to clone the repo, create a branch (`task/{issue_id}`), do the work, commit, and push. You can then review the actual code diff on GitHub alongside the agent's summary in OPC.
 
 ### Key Points
 

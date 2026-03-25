@@ -93,6 +93,7 @@ pub struct Issue {
     pub parent_issue_id: Option<Uuid>,
     pub title: String,
     pub description: Option<String>,
+    pub repo_url: Option<String>,
     pub status: String,
     pub priority: String,
     pub assignee_id: Option<Uuid>,
@@ -111,6 +112,7 @@ pub struct CreateIssue {
     pub parent_issue_id: Option<Uuid>,
     pub title: String,
     pub description: Option<String>,
+    pub repo_url: Option<String>,
     pub priority: Option<String>,
     pub assignee_id: Option<Uuid>,
 }
@@ -119,6 +121,7 @@ pub struct CreateIssue {
 pub struct UpdateIssue {
     pub title: Option<String>,
     pub description: Option<String>,
+    pub repo_url: Option<String>,
     pub status: Option<String>,
     pub priority: Option<String>,
     pub assignee_id: Option<Uuid>,

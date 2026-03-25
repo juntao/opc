@@ -100,6 +100,7 @@ pub async fn api_assign(
     let update = UpdateIssue {
         title: None,
         description: None,
+        repo_url: None,
         status: Some("todo".to_string()),
         priority: None,
         assignee_id: Some(input.assignee_id),
