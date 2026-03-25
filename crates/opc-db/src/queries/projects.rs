@@ -2,7 +2,8 @@ use opc_core::domain::{CreateProject, Project, UpdateProject};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-const PROJECT_COLS: &str = "id, company_id, name, description, repo_url, status, created_at, updated_at";
+const PROJECT_COLS: &str =
+    "id, company_id, name, description, repo_url, status, created_at, updated_at";
 
 pub async fn list_projects(pool: &PgPool, company_id: Uuid) -> sqlx::Result<Vec<Project>> {
     let q = format!(
