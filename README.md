@@ -53,6 +53,108 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/opc ./target/release/opc-serv
 RUST_LOG=opc=debug ./target/release/opc-server
 ```
 
+## Example: Building a Landing Page
+
+This walkthrough shows the full OPC workflow — from a goal to completed, human-approved work.
+
+### 1. Set Up Your Agents
+
+You (the human) create agents in the dashboard (**Agents** > **New Agent**) or via API. Each agent has a role and an adapter type that determines how it does work.
+
+```bash
+# A Claude Code agent for writing code
+curl -X POST http://localhost:3100/api/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Alice",
+    "title": "Frontend Developer",
+    "adapter_type": "claude_code",
+    "adapter_config": {
+      "working_dir": "/home/user/landing-page",
+      "model": "sonnet"
+    }
+  }'
+# Returns: {"id": "agent-alice-uuid", ...}
+
+# An OpenClaw agent for writing copy
+curl -X POST http://localhost:3100/api/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Bob",
+    "title": "Copywriter",
+    "adapter_type": "openclaw",
+    "adapter_config": {
+      "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+      "token": "your-openclaw-token"
+    }
+  }'
+# Returns: {"id": "agent-bob-uuid", ...}
+```
+
+### 2. Create Tasks With Dependencies
+
+You create all the tasks. **Only the human creates tasks** — agents never create issues on their own.
+
+Tasks can form parent-child hierarchies using `parent_issue_id`. Child tasks are not triggered until the parent is approved.
+
+```bash
+# Parent task: write the copy first
+curl -X POST http://localhost:3100/api/issues \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Write landing page copy",
+    "description": "Write headline, subheading, 3 feature bullets, and a CTA. Target audience: developers.",
+    "priority": "high",
+    "assignee_id": "agent-bob-uuid"
+  }'
+# Returns: {"id": "issue-copy-uuid", ...}
+# Bob is automatically triggered because the issue is assigned to him.
+
+# Child task: build the page using the approved copy
+curl -X POST http://localhost:3100/api/issues \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Build landing page HTML/CSS",
+    "description": "Create a responsive landing page using the approved copy from the parent task.",
+    "priority": "high",
+    "parent_issue_id": "issue-copy-uuid",
+    "assignee_id": "agent-alice-uuid"
+  }'
+# Returns: {"id": "issue-build-uuid", ...}
+# Alice is NOT triggered yet — her task depends on the parent.
+```
+
+### 3. Review and Approve
+
+Bob (the OpenClaw copywriter) finishes and submits his work. It appears in your **Approval Queue**.
+
+You open the approval and see Bob's summary: *"Wrote headline 'Ship Faster With AI', 3 feature bullets, and CTA 'Start Free'."*
+
+You have four options:
+
+- **Approve** — You like the copy. The parent task is marked done, and Alice's child task is automatically triggered. Alice wakes up, sees the approved copy in her parent task context, and starts building the page.
+- **Request Changes** — The headline is too generic. You write: *"Make the headline more specific to our product."* Bob is re-triggered with your feedback, revises the copy, and re-submits for your review.
+- **Reassign** — You decide Bob isn't the right fit. You reassign the task to a different agent, who starts fresh.
+- **Reject** — Cancel the task entirely.
+
+### 4. The Chain Continues
+
+After you approve Bob's copy, Alice is triggered automatically. She builds the page, submits, and it appears in your approval queue. You review her HTML/CSS, request changes if needed, and approve when satisfied.
+
+```
+Bob writes copy → You approve → Alice builds page → You approve → Done
+```
+
+Every step requires your approval. Agents never see each other's pending work. You are always the gatekeeper.
+
+### Key Points
+
+- **You create all tasks.** Agents only work on tasks you assign to them.
+- **You assign agents to tasks.** Either when creating the issue (`assignee_id`) or later via the dashboard or API.
+- **Tasks can depend on each other** via `parent_issue_id`. Child tasks are only triggered when their parent is approved.
+- **Multiple children** can depend on the same parent — all their assigned agents are triggered in parallel when the parent is approved.
+- **Agents work independently.** Each agent only sees its own task, the parent task context, and the comment thread.
+
 ## How Agents Work
 
 Every agent in OPC follows the same lifecycle, regardless of adapter type:
