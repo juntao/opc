@@ -190,6 +190,10 @@ fn authenticated_routes(state: AppState) -> Router<AppState> {
             post(routes::approvals::api_reject),
         )
         .route(
+            "/api/approvals/{id}/reassign",
+            post(routes::approvals::api_reassign),
+        )
+        .route(
             "/api/projects",
             get(routes::projects::api_list).post(routes::projects::api_create),
         )

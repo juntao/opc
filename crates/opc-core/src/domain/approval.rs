@@ -9,6 +9,7 @@ pub enum ApprovalStatus {
     Approved,
     ChangesRequested,
     Rejected,
+    Reassigned,
 }
 
 impl ApprovalStatus {
@@ -18,6 +19,7 @@ impl ApprovalStatus {
             Self::Approved => "approved",
             Self::ChangesRequested => "changes_requested",
             Self::Rejected => "rejected",
+            Self::Reassigned => "reassigned",
         }
     }
 
@@ -27,6 +29,7 @@ impl ApprovalStatus {
             "approved" => Some(Self::Approved),
             "changes_requested" => Some(Self::ChangesRequested),
             "rejected" => Some(Self::Rejected),
+            "reassigned" => Some(Self::Reassigned),
             _ => None,
         }
     }

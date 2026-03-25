@@ -26,6 +26,10 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
             "002_add_openclaw_adapter",
             include_str!("../../../migrations/002_add_openclaw_adapter.sql"),
         ),
+        (
+            "003_add_reassigned_approval_status",
+            include_str!("../../../migrations/003_add_reassigned_approval_status.sql"),
+        ),
     ];
 
     for (name, sql) in migrations {

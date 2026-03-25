@@ -3,6 +3,7 @@ use crate::state::AppState;
 use axum::extract::{Path, State};
 use axum::Json;
 use opc_core::domain::ApprovalRequest;
+use opc_core::domain::OpcEvent;
 use opc_core::services::approval_service;
 use opc_db::queries;
 use serde::Deserialize;
@@ -157,6 +158,59 @@ pub async fn api_reject(
         state.company_id,
         "rejected",
     );
+
+    Ok(Json(approval))
+}
+
+#[derive(Deserialize)]
+pub struct ReassignInput {
+    pub agent_id: Uuid,
+    pub comment: Option<String>,
+}
+
+pub async fn api_reassign(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    user: axum::Extension<opc_core::domain::BoardUser>,
+    Json(input): Json<ReassignInput>,
+) -> Result<Json<ApprovalRequest>, AppError> {
+    let new_agent = queries::agents::get_agent(&state.pool, input.agent_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Agent not found"))?;
+
+    let comment_text = input
+        .comment
+        .unwrap_or_else(|| format!("Reassigned to {}", new_agent.name));
+
+    let approval = queries::approvals::resolve_approval(
+        &state.pool,
+        id,
+        "reassigned",
+        &user.username,
+        Some(&comment_text),
+    )
+    .await?
+    .ok_or_else(|| anyhow::anyhow!("Approval not found or already resolved"))?;
+
+    // Post reassignment comment
+    let create = opc_core::domain::CreateComment {
+        issue_id: approval.issue_id,
+        author_type: "human".to_string(),
+        author_id: user.id.to_string(),
+        author_name: user.username.clone(),
+        body: format!("**Reassigned to {}**: {}", new_agent.name, comment_text),
+    };
+    queries::comments::create_comment(&state.pool, &create).await?;
+
+    // Reassign the issue to the new agent and reset to todo
+    queries::issues::reassign_issue(&state.pool, approval.issue_id, input.agent_id).await?;
+
+    // Trigger the new agent
+    state.event_bus.publish(OpcEvent::IssueAssigned {
+        issue_id: approval.issue_id,
+        agent_id: input.agent_id,
+        company_id: state.company_id,
+    });
 
     Ok(Json(approval))
 }
