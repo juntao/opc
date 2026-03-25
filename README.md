@@ -115,7 +115,7 @@ curl -X POST http://localhost:3100/api/issues \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Build landing page HTML/CSS",
-    "description": "Create a responsive landing page using the approved copy from the parent task.",
+    "description": "Clone https://github.com/yourorg/landing-page.git, create a new branch, build a responsive landing page using the approved copy from the parent task, commit, and push the branch.",
     "priority": "high",
     "parent_issue_id": "issue-copy-uuid",
     "assignee_id": "agent-alice-uuid"
@@ -139,13 +139,19 @@ You have four options:
 
 ### 4. The Chain Continues
 
-After you approve Bob's copy, Alice is triggered automatically. She builds the page, submits, and it appears in your approval queue. You review her HTML/CSS, request changes if needed, and approve when satisfied.
+After you approve Bob's copy, Alice is triggered automatically. She clones the repo, creates a branch, builds the page, commits, and pushes. OPC captures her text summary and submits it for your approval. You review the summary in the approval queue, then check the pushed branch to review the actual code. Request changes if needed, approve when satisfied.
 
 ```
-Bob writes copy → You approve → Alice builds page → You approve → Done
+Bob writes copy → You approve → Alice builds page & pushes branch → You approve → Done
 ```
 
 Every step requires your approval. Agents never see each other's pending work. You are always the gatekeeper.
+
+### Where Does the Code Go?
+
+OPC is a **task orchestration and approval system**, not a code hosting platform. When an agent writes code, the files live in the agent's workspace — OPC only captures the agent's text summary of what was done, not the actual files.
+
+**Best practice:** Create a GitHub repo for your project and instruct agents in the task description to clone the repo, create a branch, do the work, and push. This way you can review the actual code diff on GitHub alongside the agent's summary in OPC.
 
 ### Key Points
 
