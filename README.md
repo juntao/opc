@@ -372,7 +372,11 @@ Response:
 
 Instead of creating issues manually, you can use the **planning skill** to discuss your project with an OpenClaw agent and have it create all the issues for you.
 
-1. Install the skill from [`skills/planning/SKILL.md`](skills/planning/SKILL.md) into your OpenClaw agent
+1. Install the skill into your OpenClaw agent by creating a skill folder and downloading the file:
+   ```bash
+   mkdir -p skills/planning
+   curl -o skills/planning/SKILL.md https://raw.githubusercontent.com/juntao/opc/main/skills/planning/SKILL.md
+   ```
 2. Start a conversation with the agent — describe what you want to build
 3. The agent lists available OPC agents, proposes a breakdown of issues with dependencies and assignments
 4. When you say "go", it creates a project and all the issues via OPC's Agent API
