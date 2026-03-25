@@ -109,7 +109,7 @@ curl -X POST http://localhost:3100/api/projects \
 
 Now create tasks. You create all the tasks — or use the [planning skill](#project-planning-with-openclaw) to have an OpenClaw agent create them for you.
 
-Tasks can form parent-child hierarchies using `parent_issue_id`. Child tasks are not triggered until the parent is approved.
+The project starts in **draft** status. All issues under a draft project are held in **backlog** — agents are NOT triggered yet. This lets you build up the full plan before kicking anything off.
 
 ```bash
 # Parent task: write the copy first
@@ -123,7 +123,7 @@ curl -X POST http://localhost:3100/api/issues \
     "assignee_id": "agent-bob-uuid"
   }'
 # Returns: {"id": "issue-copy-uuid", ...}
-# Bob is automatically triggered because the issue is assigned to him.
+# Bob is NOT triggered yet — project is still in draft.
 
 # Child task: build the page using the approved copy
 curl -X POST http://localhost:3100/api/issues \
@@ -137,10 +137,22 @@ curl -X POST http://localhost:3100/api/issues \
     "assignee_id": "agent-alice-uuid"
   }'
 # Returns: {"id": "issue-build-uuid", ...}
-# Alice is NOT triggered yet — her task depends on the parent.
 ```
 
-### 3. Review and Approve
+### 3. Approve the Project
+
+Once your plan is ready, approve the project to kick off all agents:
+
+```bash
+# Via API
+curl -X POST http://localhost:3100/api/projects/project-uuid/approve
+```
+
+Or click **Approve Project** on the project detail page in the dashboard. This activates all root-level issues (those without a parent) and triggers their assigned agents. Child issues remain in backlog until their parent is approved through the normal approval flow.
+
+If you change your mind, you can **delete** the project — this cascades and removes all issues, approvals, and related data.
+
+### 4. Review and Approve
 
 Bob (the OpenClaw copywriter) finishes and submits his work. It appears in your **Approval Queue**.
 
@@ -153,12 +165,12 @@ You have four options:
 - **Reassign** — You decide Bob isn't the right fit. You reassign the task to a different agent, who starts fresh.
 - **Reject** — Cancel the task entirely.
 
-### 4. The Chain Continues
+### 5. The Chain Continues
 
 After you approve Bob's copy, Alice is triggered automatically. She clones the repo, creates a branch, builds the page, commits, and pushes. OPC captures her text summary and submits it for your approval. You review the summary in the approval queue, then check the pushed branch to review the actual code. Request changes if needed, approve when satisfied.
 
 ```
-Bob writes copy → You approve → Alice builds page & pushes branch → You approve → Done
+Approve project → Bob writes copy → You approve → Alice builds page & pushes branch → You approve → Done
 ```
 
 Every step requires your approval. Agents never see each other's pending work. You are always the gatekeeper.
@@ -365,7 +377,7 @@ Instead of creating issues manually, you can use the **planning skill** to discu
 3. The agent lists available OPC agents, proposes a breakdown of issues with dependencies and assignments
 4. When you say "go", it creates a project and all the issues via OPC's Agent API
 
-All issues are created in **backlog** — agents are NOT triggered automatically. You review the plan in the OPC dashboard and decide when to kick things off.
+The project is created in **draft** and all issues are in **backlog** — agents are NOT triggered. You review the plan in the OPC dashboard, then **approve the project** to activate root-level issues and dispatch agents.
 
 ## Agent API
 
@@ -382,7 +394,8 @@ External agents authenticate with their API key (`Authorization: Bearer opc_...`
 | `/api/agent/issues/{id}/submit` | `POST` | Submit completed work for human approval |
 | `/api/agent/issues/{id}/comments` | `GET` | Read the comment thread (including human feedback) |
 | `/api/agent/issues/{id}/comments` | `POST` | Post a comment on the issue |
-| `/api/agent/projects` | `POST` | Create a project |
+| `/api/agent/projects` | `POST` | Create a project (starts in draft) |
+| `/api/agent/projects/{id}/updates` | `POST` | Post a project-level progress update |
 
 ### Typical Agent Workflow
 
@@ -428,7 +441,8 @@ Open **http://localhost:3100** in your browser and log in (`admin` / `admin`).
 | **Issue Detail** | `/issues/{id}` | View issue details, comment thread, sub-tasks, and inline approval widget |
 | **Approval Queue** | `/approvals` | Review all pending agent submissions. Approve, request changes, reassign, or reject |
 | **Approval Detail** | `/approvals/{id}` | Full review page with the agent's summary, original task, conversation thread, and action buttons |
-| **Projects** | `/projects` | Organize issues into projects |
+| **Projects** | `/projects` | Organize issues into projects. Approve draft projects to kick off agents |
+| **Project Detail** | `/projects/{id}` | View project issues, approve the project, delete, and see agent updates |
 
 ### Reviewing and Approving Agent Work
 

@@ -24,7 +24,7 @@ Ask the user for these if they haven't provided them.
 4. **Break down the work.** Propose a set of issues with titles, descriptions, priorities, dependencies, and agent assignments. Present this as a tree showing parent-child relationships. Discuss with the user until the plan is solid.
 5. **Create the issues.** Once the user confirms, create all issues via the API. You MUST create parent issues before children, because you need the parent's returned `id` to set `parent_issue_id` on children.
 
-All issues are created in **backlog** status. Agents are NOT triggered automatically. The human reviews the plan in the OPC dashboard and decides when to kick things off.
+Projects are created in **draft** status and all issues under a draft project are forced to **backlog**. Agents are NOT triggered automatically. The human reviews the plan in the OPC dashboard and **approves the project** to activate all root-level issues and dispatch agents.
 
 ## Task Dependencies (Sub-Issues)
 

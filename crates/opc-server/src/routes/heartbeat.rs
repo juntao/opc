@@ -74,6 +74,21 @@ async fn handle_event(state: &AppState, event: OpcEvent) -> anyhow::Result<()> {
                 _ => {}
             }
         }
+        OpcEvent::ProjectApproved { project_id, .. } => {
+            info!(
+                "Project {} approved, activating root-level issues",
+                project_id
+            );
+            let root_issues =
+                queries::projects::get_root_issues_for_activation(&state.pool, project_id).await?;
+            for issue in root_issues {
+                queries::issues::update_issue_status(&state.pool, issue.id, "todo").await?;
+                if let Some(assignee_id) = issue.assignee_id {
+                    info!("Triggering agent {} for issue {}", assignee_id, issue.id);
+                    trigger_agent_heartbeat(state, assignee_id, "assignment").await?;
+                }
+            }
+        }
         _ => {}
     }
 

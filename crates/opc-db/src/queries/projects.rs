@@ -1,4 +1,4 @@
-use opc_core::domain::{CreateProject, Project, UpdateProject};
+use opc_core::domain::{CreateProject, Issue, Project, UpdateProject};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -51,5 +51,30 @@ pub async fn update_project(
         .bind(&input.repo_url)
         .bind(&input.status)
         .fetch_optional(pool)
+        .await
+}
+
+pub async fn delete_project(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    let result = sqlx::query("DELETE FROM projects WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
+const ISSUE_COLS: &str = "id, company_id, project_id, parent_issue_id, title, description, status, priority, assignee_id, checked_out_by, checked_out_at, approved_by, approved_at, created_at, updated_at";
+
+/// Get root-level backlog issues with assignees, ready to be activated.
+pub async fn get_root_issues_for_activation(
+    pool: &PgPool,
+    project_id: Uuid,
+) -> sqlx::Result<Vec<Issue>> {
+    let q = format!(
+        "SELECT {} FROM issues WHERE project_id = $1 AND parent_issue_id IS NULL AND assignee_id IS NOT NULL AND status = 'backlog' ORDER BY created_at ASC",
+        ISSUE_COLS
+    );
+    sqlx::query_as::<_, Issue>(&q)
+        .bind(project_id)
+        .fetch_all(pool)
         .await
 }
