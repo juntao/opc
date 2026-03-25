@@ -107,7 +107,7 @@ curl -X POST http://localhost:3100/api/projects \
 # Returns: {"id": "project-uuid", ...}
 ```
 
-Now create tasks. You create all the tasks — agents never create issues on their own (unless you use a [Project Planner](#project-planner) agent).
+Now create tasks. You create all the tasks — or use the [planning skill](#project-planning-with-openclaw) to have an OpenClaw agent create them for you.
 
 Tasks can form parent-child hierarchies using `parent_issue_id`. Child tasks are not triggered until the parent is approved.
 
@@ -281,7 +281,6 @@ OPC automatically generates an API key and stores it in the agent's `adapter_con
 | `deliver` | No | Also post to a messaging channel (default: `false`) |
 | `channel` | No | Target channel if `deliver` is `true` (e.g. `"slack"`) |
 | `to` | No | Recipient if `deliver` is `true` (e.g. `"#general"`) |
-| `planner` | No | Enable [Project Planner](#project-planner) mode (default: `false`) |
 
 **Flow:** OPC sends the task prompt to OpenClaw's webhook with `deliver: false` → OpenClaw processes the task silently → OpenClaw runs a curl command (embedded in the prompt) to submit results back to OPC → issue moves to `awaiting_approval`. The prompt includes the issue ID, API key, and exact curl command that OpenClaw needs to call back.
 
@@ -357,44 +356,16 @@ Response:
 }
 ```
 
-### Project Planner
+### Project Planning with OpenClaw
 
-A planner agent takes a high-level goal, breaks it down into issues with dependencies, and creates them via OPC's API. All created issues start in **backlog** — agents aren't triggered until you review and approve the plan.
+Instead of creating issues manually, you can use the **planning skill** to discuss your project with an OpenClaw agent and have it create all the issues for you.
 
-```bash
-curl -X POST http://localhost:3100/api/agents \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Project Planner",
-    "title": "Project Manager",
-    "adapter_type": "openclaw",
-    "adapter_config": {
-      "webhook_url": "http://127.0.0.1:18789/hooks/agent",
-      "token": "your-openclaw-token",
-      "planner": true
-    }
-  }'
-```
+1. Install the skill from [`skills/planning/SKILL.md`](skills/planning/SKILL.md) into your OpenClaw agent
+2. Start a conversation with the agent — describe what you want to build
+3. The agent lists available OPC agents, proposes a breakdown of issues with dependencies and assignments
+4. When you say "go", it creates a project and all the issues via OPC's Agent API
 
-Then assign a planning task:
-
-```bash
-curl -X POST http://localhost:3100/api/issues \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Plan the landing page project",
-    "description": "Break this down into tasks: write marketing copy, build the frontend, write tests. Assign each task to the most appropriate agent. Use https://github.com/yourorg/landing-page.git as the repo.",
-    "assignee_id": "planner-agent-uuid"
-  }'
-```
-
-When `planner: true` is set, OPC includes a list of available agents and curl command templates for creating projects and issues in the agent's prompt. The planner:
-
-1. Creates a project (with optional `repo_url`)
-2. Creates issues with dependencies (`parent_issue_id`) and assigns them to agents
-3. Submits a summary of the plan for your approval
-
-You review the plan in the approval queue. All created issues are in backlog — you decide when to kick things off.
+All issues are created in **backlog** — agents are NOT triggered automatically. You review the plan in the OPC dashboard and decide when to kick things off.
 
 ## Agent API
 
@@ -411,7 +382,7 @@ External agents authenticate with their API key (`Authorization: Bearer opc_...`
 | `/api/agent/issues/{id}/submit` | `POST` | Submit completed work for human approval |
 | `/api/agent/issues/{id}/comments` | `GET` | Read the comment thread (including human feedback) |
 | `/api/agent/issues/{id}/comments` | `POST` | Post a comment on the issue |
-| `/api/agent/projects` | `POST` | Create a project (used by planner agents) |
+| `/api/agent/projects` | `POST` | Create a project |
 
 ### Typical Agent Workflow
 

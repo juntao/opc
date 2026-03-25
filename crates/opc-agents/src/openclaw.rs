@@ -28,8 +28,6 @@ pub struct OpenClawConfig {
     pub to: Option<String>,
     /// Model override (e.g. "anthropic/claude-sonnet-4-6").
     pub model: Option<String>,
-    /// Enable project planner mode — includes available agents and issue creation API in prompt.
-    pub planner: Option<bool>,
 }
 
 /// Payload sent to OpenClaw's /hooks/agent endpoint.
@@ -83,33 +81,11 @@ impl OpenClawAdapter {
             prompt.push_str(&format!("## Description\n{}\n\n", desc));
         }
 
-        if let Some(repo_url) = context
-            .project
-            .as_ref()
-            .and_then(|p| p.repo_url.as_ref())
-        {
+        if let Some(repo_url) = context.project.as_ref().and_then(|p| p.repo_url.as_ref()) {
             let id_short = &context.issue.id.to_string()[..8];
             prompt.push_str(&format!(
                 "## Git Repository\n\nClone the repository, create a new branch for this task, do your work, commit, and push the branch.\n\nRepository: {}\n\nSteps:\n1. `git clone {}`\n2. `git checkout -b task/{}`\n3. Do the work\n4. `git add . && git commit -m \"<summary>\" && git push origin task/{}`\n\n",
                 repo_url, repo_url, id_short, id_short
-            ));
-        }
-
-        // Planner section: include available agents and issue creation API
-        if config.planner.unwrap_or(false) && !context.available_agents.is_empty() {
-            prompt.push_str("## Available Agents\n\nYou can assign issues to these agents:\n\n| ID | Name | Title |\n|----|------|-------|\n");
-            for a in &context.available_agents {
-                prompt.push_str(&format!(
-                    "| {} | {} | {} |\n",
-                    a.id,
-                    a.name,
-                    a.title.as_deref().unwrap_or("-")
-                ));
-            }
-            prompt.push_str(&format!(
-                "\n## Planning API\n\nCreate a project first (if needed), then create issues under it.\n\n**Create a project:**\n```bash\ncurl -X POST {}/api/agent/projects \\\n  -H 'Authorization: Bearer {}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{{\"name\": \"Project Name\", \"description\": \"...\", \"repo_url\": \"https://github.com/org/repo.git\"}}'\n```\n\n**Create an issue** (use the project id from above):\n```bash\ncurl -X POST {}/api/agent/issues \\\n  -H 'Authorization: Bearer {}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{{\"title\": \"...\", \"description\": \"...\", \"priority\": \"high\", \"project_id\": \"project-uuid\", \"assignee_id\": \"agent-uuid\", \"parent_issue_id\": null}}'\n```\n\nCreate parent issues first, then use their returned `id` as `parent_issue_id` for child issues.\nAll issues start in backlog — the human will review and trigger them after approving your plan.\n\n",
-                context.api_base_url, config.opc_api_key,
-                context.api_base_url, config.opc_api_key,
             ));
         }
 

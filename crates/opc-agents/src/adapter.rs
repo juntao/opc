@@ -11,6 +11,7 @@ pub struct AgentSummary {
     pub name: String,
     pub title: Option<String>,
     pub role: Option<String>,
+    pub capabilities: Option<String>,
     pub adapter_type: String,
 }
 
@@ -21,6 +22,7 @@ impl From<Agent> for AgentSummary {
             name: a.name,
             title: a.title,
             role: a.role,
+            capabilities: a.capabilities,
             adapter_type: a.adapter_type,
         }
     }
