@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Issues - OPC{% endblock %}
+{% block body %}
+<div class="layout">
+    {% let active = "issues" %}
+    {% include "components/sidebar.html" %}
+    <main class="main">
+        <div class="page-header">
+            <h1>Issues</h1>
+            <a href="/issues/new" class="btn btn-primary">+ New Issue</a>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+            <a href="/issues" class="btn btn-sm {% if filter_status.is_empty() %}btn-primary{% else %}btn-ghost{% endif %}">All</a>
+            <a href="/issues?status=todo" class="btn btn-sm {% if filter_status == "todo" %}btn-primary{% else %}btn-ghost{% endif %}">Todo</a>
+            <a href="/issues?status=in_progress" class="btn btn-sm {% if filter_status == "in_progress" %}btn-primary{% else %}btn-ghost{% endif %}">In Progress</a>
+            <a href="/issues?status=awaiting_approval" class="btn btn-sm {% if filter_status == "awaiting_approval" %}btn-primary{% else %}btn-ghost{% endif %}">Awaiting Approval</a>
+            <a href="/issues?status=done" class="btn btn-sm {% if filter_status == "done" %}btn-primary{% else %}btn-ghost{% endif %}">Done</a>
+        </div>
+
+        {% if issues.is_empty() %}
+        <div class="card">
+            <div class="empty-state">
+                <div class="empty-state-icon">&#128203;</div>
+                <p>No issues found. Create one to get started.</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="card" style="padding: 0;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Assignee</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for issue in issues %}
+                    <tr>
+                        <td><a href="/issues/{{ issue.id }}"><strong>{{ issue.title }}</strong></a></td>
+                        <td><span class="badge-status badge-{{ issue.status }}">{{ issue.status }}</span></td>
+                        <td>{{ issue.priority }}</td>
+                        <td>
+                            {% match issue.assignee_id %}
+                            {% when Some with (aid) %}
+                                {% for a in agents %}
+                                    {% if a.id.to_string() == aid.to_string() %}{{ a.name }}{% endif %}
+                                {% endfor %}
+                            {% when None %}
+                            <span style="color: var(--text-muted);">Unassigned</span>
+                            {% endmatch %}
+                        </td>
+                        <td style="color: var(--text-muted);">{{ issue.created_at.format("%Y-%m-%d") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}

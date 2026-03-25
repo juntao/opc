@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Approvals - OPC{% endblock %}
+{% block body %}
+<div class="layout">
+    {% let active = "approvals" %}
+    {% include "components/sidebar.html" %}
+    <main class="main" hx-ext="sse" sse-connect="/api/events">
+        <div class="page-header">
+            <h1>Pending Approvals</h1>
+        </div>
+
+        {% if approvals.is_empty() %}
+        <div class="card">
+            <div class="empty-state">
+                <div class="empty-state-icon">&#9989;</div>
+                <p>All caught up! No pending approvals.</p>
+            </div>
+        </div>
+        {% else %}
+        <div id="approval-list">
+            {% for item in approvals %}
+            <div class="card" style="border-left: 3px solid var(--yellow);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        {% if let Some(issue) = item.issue %}
+                        <h3 style="font-size: 1rem; margin-bottom: 0.25rem;">
+                            <a href="/approvals/{{ item.approval.id }}">{{ issue.title }}</a>
+                        </h3>
+                        {% endif %}
+                        {% if let Some(agent) = item.agent %}
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">
+                            Completed by <strong>{{ agent.name }}</strong>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <span class="badge-status badge-pending">pending</span>
+                </div>
+                <p style="font-size: 0.875rem; margin: 0.75rem 0; color: var(--text-muted);">
+                    {{ item.approval.summary }}
+                </p>
+                <div style="display: flex; gap: 0.5rem;">
+                    <a href="/approvals/{{ item.approval.id }}" class="btn btn-primary btn-sm">Review</a>
+                    <button class="btn btn-green btn-sm"
+                        hx-post="/api/approvals/{{ item.approval.id }}/approve"
+                        hx-vals='{"comment": ""}'
+                        hx-swap="none"
+                        hx-on::after-request="location.reload()">
+                        Quick Approve
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}

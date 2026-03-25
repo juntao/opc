@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Login - OPC{% endblock %}
+{% block body %}
+<div style="display: flex; align-items: center; justify-content: center; min-height: 100vh;">
+    <div class="card" style="width: 400px;">
+        <h1 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem;">OPC</h1>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.875rem;">One Person Company - Sign in to continue</p>
+        {% if let Some(err) = error %}
+        <div style="background: #450a0a; color: #fca5a5; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.875rem;">{{ err }}</div>
+        {% endif %}
+        <form method="POST" action="/login">
+            <div class="form-group">
+                <label class="form-label">Username</label>
+                <input type="text" name="username" class="form-input" required autofocus>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" name="password" class="form-input" required>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Sign In</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

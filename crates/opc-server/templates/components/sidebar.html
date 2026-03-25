@@ -1,0 +1,17 @@
+<aside class="sidebar">
+    <div class="sidebar-logo"><span>OPC</span></div>
+    <nav>
+        <a href="/" {% if active == "dashboard" %}class="active"{% endif %}>Dashboard</a>
+        <a href="/approvals" {% if active == "approvals" %}class="active"{% endif %}>
+            Approvals
+            <span class="badge" id="approval-count" hx-get="/api/approvals" hx-trigger="every 10s" hx-swap="none"></span>
+        </a>
+        <a href="/issues" {% if active == "issues" %}class="active"{% endif %}>Issues</a>
+        <a href="/agents" {% if active == "agents" %}class="active"{% endif %}>Agents</a>
+        <a href="/projects" {% if active == "projects" %}class="active"{% endif %}>Projects</a>
+    </nav>
+    <div style="position: absolute; bottom: 1rem; left: 0; right: 0; padding: 0 1.25rem;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">{{ user.username }}</div>
+        <a href="/logout" style="font-size: 0.8rem; color: var(--text-muted);">Sign out</a>
+    </div>
+</aside>

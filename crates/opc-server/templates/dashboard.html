@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - OPC{% endblock %}
+{% block body %}
+<div class="layout">
+    {% let active = "dashboard" %}
+    {% include "components/sidebar.html" %}
+    <main class="main">
+        <div class="page-header">
+            <h1>Dashboard</h1>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Agents</div>
+                <div class="stat-value">{{ agent_count }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active Issues</div>
+                <div class="stat-value">{{ active_issues }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label" style="color: var(--yellow);">Pending Approvals</div>
+                <div class="stat-value" style="color: var(--yellow);">{{ pending_approvals }}</div>
+            </div>
+        </div>
+
+        {% if pending_approvals > 0 %}
+        <div class="card" style="border-color: var(--yellow);">
+            <div class="card-header">
+                <span class="card-title" style="color: var(--yellow);">Action Required</span>
+            </div>
+            <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                {{ pending_approvals }} task(s) awaiting your approval.
+            </p>
+            <a href="/approvals" class="btn btn-yellow btn-sm">Review Approvals</a>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Recent Activity</span>
+            </div>
+            {% if recent_activity.is_empty() %}
+            <div class="empty-state">
+                <p>No activity yet. Create an agent and assign a task to get started.</p>
+            </div>
+            {% else %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Action</th>
+                        <th>Actor</th>
+                        <th>Entity</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in recent_activity %}
+                    <tr>
+                        <td>{{ entry.action }}</td>
+                        <td><span class="badge-status badge-{{ entry.actor_type }}">{{ entry.actor_type }}</span> {{ entry.actor_id }}</td>
+                        <td>{{ entry.entity_type }} </td>
+                        <td style="color: var(--text-muted);">{{ entry.created_at.format("%Y-%m-%d %H:%M") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+    </main>
+</div>
+{% endblock %}
