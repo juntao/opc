@@ -93,6 +93,8 @@ Agents are triggered automatically by system events:
 
 ## Connecting Agents
 
+You can create and configure agents from the **dashboard** (go to **Agents** > **New Agent**) or via the API as shown below.
+
 ### Claude Code
 
 OPC spawns a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI process with the task context as the prompt. Claude Code works locally on your machine, and OPC automatically submits its output for your approval.
@@ -128,12 +130,7 @@ Requires the `claude` CLI to be installed and authenticated on the machine runni
 
 OPC sends the task to an [OpenClaw](https://openclaw.ai/) agent via its webhook API. OpenClaw processes the task, then calls back to OPC to submit results. No messaging channels are involved — OpenClaw works silently and submits directly back to OPC.
 
-**Setup:**
-
-1. Create the agent and generate an API key:
-
 ```bash
-# Create the agent
 curl -X POST http://localhost:3100/api/agents \
   -H "Content-Type: application/json" \
   -d '{
@@ -142,30 +139,12 @@ curl -X POST http://localhost:3100/api/agents \
     "adapter_type": "openclaw",
     "adapter_config": {
       "webhook_url": "http://127.0.0.1:18789/hooks/agent",
-      "token": "your-openclaw-hooks-token",
-      "opc_api_key": "PASTE_KEY_HERE"
-    }
-  }'
-
-# Generate an API key for the agent
-curl -X POST http://localhost:3100/api/agents/{agent_id}/keys
-# Returns: {"api_key": "opc_abc123...", ...}
-# Paste this key into the adapter_config.opc_api_key field
-```
-
-2. Update the agent config with the generated API key:
-
-```bash
-curl -X PUT http://localhost:3100/api/agents/{agent_id} \
-  -H "Content-Type: application/json" \
-  -d '{
-    "adapter_config": {
-      "webhook_url": "http://127.0.0.1:18789/hooks/agent",
-      "token": "your-openclaw-hooks-token",
-      "opc_api_key": "opc_abc123..."
+      "token": "your-openclaw-hooks-token"
     }
   }'
 ```
+
+OPC automatically generates an API key and stores it in the agent's `adapter_config.opc_api_key`. This key is embedded in the prompt so OpenClaw can call back to submit results.
 
 **Config options:**
 
@@ -173,7 +152,6 @@ curl -X PUT http://localhost:3100/api/agents/{agent_id} \
 |-------|----------|-------------|
 | `webhook_url` | Yes | OpenClaw's `/hooks/agent` endpoint |
 | `token` | Yes | Bearer token for OpenClaw authentication |
-| `opc_api_key` | Yes | OPC API key so OpenClaw can submit results back |
 | `timeout_secs` | No | Timeout in seconds (default: 300) |
 | `model` | No | Model override (e.g. `"anthropic/claude-sonnet-4-6"`) |
 | `deliver` | No | Also post to a messaging channel (default: `false`) |

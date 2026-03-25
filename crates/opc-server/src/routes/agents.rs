@@ -31,6 +31,42 @@ pub async fn api_create(
 ) -> Result<Json<Agent>, AppError> {
     input.company_id = state.company_id;
     let agent = queries::agents::create_agent(&state.pool, &input).await?;
+
+    // For OpenClaw agents, auto-generate an API key and store it in adapter_config
+    if input.adapter_type == "openclaw" {
+        let random_bytes: [u8; 24] = rand::random();
+        let key_suffix = hex::encode(random_bytes);
+        let prefix = &key_suffix[..8];
+        let raw_key = format!("opc_{}{}", prefix, &key_suffix[8..]);
+
+        let salt = SaltString::generate(&mut OsRng);
+        let hash = Argon2::default()
+            .hash_password(raw_key.as_bytes(), &salt)
+            .map_err(|e| anyhow::anyhow!("Hash error: {}", e))?
+            .to_string();
+
+        queries::agents::create_api_key(&state.pool, agent.id, state.company_id, &hash, prefix)
+            .await?;
+
+        // Inject the raw key into adapter_config
+        let mut config = input.adapter_config.clone();
+        config["opc_api_key"] = serde_json::Value::String(raw_key);
+        let update = UpdateAgent {
+            name: None,
+            title: None,
+            role: None,
+            capabilities: None,
+            adapter_type: None,
+            adapter_config: Some(config),
+            monthly_budget_cents: None,
+            manager_id: None,
+        };
+        let agent = queries::agents::update_agent(&state.pool, agent.id, &update)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Failed to update agent config"))?;
+        return Ok(Json(agent));
+    }
+
     Ok(Json(agent))
 }
 
