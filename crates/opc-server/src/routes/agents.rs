@@ -5,7 +5,8 @@ use argon2::password_hash::{PasswordHasher, SaltString};
 use argon2::Argon2;
 use axum::extract::{Path, State};
 use axum::Json;
-use opc_core::domain::{Agent, CreateAgent, UpdateAgent};
+use opc_agents::adapter::AgentSummary;
+use opc_core::domain::{Agent, CreateAgent, CreateIssue, CreateProject, OpcEvent, UpdateAgent};
 use opc_db::queries;
 use serde::Deserialize;
 use uuid::Uuid;
@@ -231,4 +232,51 @@ pub async fn agent_submit(
         "approval_id": approval.id,
         "status": "awaiting_approval"
     })))
+}
+
+/// Agent creates an issue. Issues are created in backlog — agents aren't triggered.
+pub async fn agent_create_issue(
+    State(state): State<AppState>,
+    agent: axum::Extension<Agent>,
+    Json(mut input): Json<CreateIssue>,
+) -> Result<Json<opc_core::domain::Issue>, AppError> {
+    input.company_id = agent.company_id;
+    let issue = queries::issues::create_issue(&state.pool, &input).await?;
+
+    // Force backlog so agents aren't triggered until the human approves
+    if issue.status != "backlog" {
+        queries::issues::update_issue_status(&state.pool, issue.id, "backlog").await?;
+    }
+
+    state.event_bus.publish(OpcEvent::IssueCreated {
+        issue_id: issue.id,
+        company_id: agent.company_id,
+    });
+
+    Ok(Json(issue))
+}
+
+/// Agent creates a project.
+pub async fn agent_create_project(
+    State(state): State<AppState>,
+    agent: axum::Extension<Agent>,
+    Json(mut input): Json<CreateProject>,
+) -> Result<Json<opc_core::domain::Project>, AppError> {
+    input.company_id = agent.company_id;
+    let project = queries::projects::create_project(&state.pool, &input).await?;
+    Ok(Json(project))
+}
+
+/// Agent lists available colleague agents.
+pub async fn agent_list_agents(
+    State(state): State<AppState>,
+    agent: axum::Extension<Agent>,
+) -> Result<Json<Vec<AgentSummary>>, AppError> {
+    let agents = queries::agents::list_agents(&state.pool, agent.company_id).await?;
+    let summaries: Vec<AgentSummary> = agents
+        .into_iter()
+        .filter(|a| a.id != agent.id)
+        .map(AgentSummary::from)
+        .collect();
+    Ok(Json(summaries))
 }

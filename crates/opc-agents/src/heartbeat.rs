@@ -65,6 +65,18 @@ pub async fn execute_heartbeat(
     // Get context
     let comments = queries::comments::list_comments(pool, issue.id).await?;
     let parent_chain = queries::issues::get_parent_chain(pool, issue.id).await?;
+    let project = if let Some(pid) = issue.project_id {
+        queries::projects::get_project(pool, pid).await?
+    } else {
+        None
+    };
+    let available_agents: Vec<crate::adapter::AgentSummary> =
+        queries::agents::list_agents(pool, agent.company_id)
+            .await?
+            .into_iter()
+            .filter(|a| a.id != agent.id)
+            .map(crate::adapter::AgentSummary::from)
+            .collect();
 
     // Build adapter
     let adapter: Box<dyn AgentAdapter> = create_adapter(agent)?;
@@ -72,8 +84,10 @@ pub async fn execute_heartbeat(
     let context = AgentTaskContext {
         agent: agent.clone(),
         issue: issue.clone(),
+        project,
         comments,
         parent_chain,
+        available_agents,
         trigger: trigger.to_string(),
         api_base_url: api_base_url.to_string(),
         api_key: String::new(), // Agent uses its own key externally

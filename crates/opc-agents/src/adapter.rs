@@ -1,15 +1,40 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use opc_core::domain::{Agent, Issue, IssueComment};
+use opc_core::domain::{Agent, Issue, IssueComment, Project};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// Lightweight agent info exposed to other agents (no secrets/budgets).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSummary {
+    pub id: Uuid,
+    pub name: String,
+    pub title: Option<String>,
+    pub role: Option<String>,
+    pub adapter_type: String,
+}
+
+impl From<Agent> for AgentSummary {
+    fn from(a: Agent) -> Self {
+        Self {
+            id: a.id,
+            name: a.name,
+            title: a.title,
+            role: a.role,
+            adapter_type: a.adapter_type,
+        }
+    }
+}
 
 /// Context provided to an agent when invoked.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentTaskContext {
     pub agent: Agent,
     pub issue: Issue,
+    pub project: Option<Project>,
     pub comments: Vec<IssueComment>,
     pub parent_chain: Vec<Issue>,
+    pub available_agents: Vec<AgentSummary>,
     pub trigger: String,
     pub api_base_url: String,
     pub api_key: String,

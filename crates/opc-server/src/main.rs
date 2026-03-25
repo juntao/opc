@@ -128,6 +128,9 @@ fn agent_api_routes(state: AppState) -> Router<AppState> {
             "/issues/{id}/comments",
             get(routes::comments::api_list).post(routes::comments::api_create_agent),
         )
+        .route("/issues", post(routes::agents::agent_create_issue))
+        .route("/projects", post(routes::agents::agent_create_project))
+        .route("/agents", get(routes::agents::agent_list_agents))
         .layer(axum_mw::from_fn_with_state(state, middleware::agent_auth))
 }
 

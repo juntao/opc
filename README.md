@@ -91,9 +91,23 @@ curl -X POST http://localhost:3100/api/agents \
 # Returns: {"id": "agent-bob-uuid", ...}
 ```
 
-### 2. Create Tasks With Dependencies
+### 2. Create a Project and Tasks
 
-You create all the tasks. **Only the human creates tasks** — agents never create issues on their own.
+Create a project to group related issues. Set `repo_url` on the project — all agents working on issues in this project will automatically get git workflow instructions.
+
+```bash
+# Create a project with a GitHub repo
+curl -X POST http://localhost:3100/api/projects \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Landing Page",
+    "description": "Company landing page redesign",
+    "repo_url": "https://github.com/yourorg/landing-page.git"
+  }'
+# Returns: {"id": "project-uuid", ...}
+```
+
+Now create tasks. You create all the tasks — agents never create issues on their own (unless you use a [Project Planner](#project-planner) agent).
 
 Tasks can form parent-child hierarchies using `parent_issue_id`. Child tasks are not triggered until the parent is approved.
 
@@ -105,6 +119,7 @@ curl -X POST http://localhost:3100/api/issues \
     "title": "Write landing page copy",
     "description": "Write headline, subheading, 3 feature bullets, and a CTA. Target audience: developers.",
     "priority": "high",
+    "project_id": "project-uuid",
     "assignee_id": "agent-bob-uuid"
   }'
 # Returns: {"id": "issue-copy-uuid", ...}
@@ -116,8 +131,8 @@ curl -X POST http://localhost:3100/api/issues \
   -d '{
     "title": "Build landing page HTML/CSS",
     "description": "Create a responsive landing page using the approved copy from the parent task.",
-    "repo_url": "https://github.com/yourorg/landing-page.git",
     "priority": "high",
+    "project_id": "project-uuid",
     "parent_issue_id": "issue-copy-uuid",
     "assignee_id": "agent-alice-uuid"
   }'
@@ -152,7 +167,7 @@ Every step requires your approval. Agents never see each other's pending work. Y
 
 OPC is a **task orchestration and approval system**, not a code hosting platform. When an agent writes code, the files live in the agent's workspace — OPC only captures the agent's text summary of what was done, not the actual files.
 
-To bridge this gap, set the `repo_url` field when creating an issue. When `repo_url` is set, OPC automatically appends git workflow instructions to the agent's prompt — telling it to clone the repo, create a branch (`task/{issue_id}`), do the work, commit, and push. You can then review the actual code diff on GitHub alongside the agent's summary in OPC.
+To bridge this gap, set `repo_url` on the **project**. When a project has a `repo_url`, OPC automatically appends git workflow instructions to every agent's prompt for issues in that project — telling it to clone the repo, create a branch (`task/{issue_id}`), do the work, commit, and push. You can then review the actual code diff on GitHub alongside the agent's summary in OPC.
 
 ### Key Points
 
@@ -266,6 +281,7 @@ OPC automatically generates an API key and stores it in the agent's `adapter_con
 | `deliver` | No | Also post to a messaging channel (default: `false`) |
 | `channel` | No | Target channel if `deliver` is `true` (e.g. `"slack"`) |
 | `to` | No | Recipient if `deliver` is `true` (e.g. `"#general"`) |
+| `planner` | No | Enable [Project Planner](#project-planner) mode (default: `false`) |
 
 **Flow:** OPC sends the task prompt to OpenClaw's webhook with `deliver: false` → OpenClaw processes the task silently → OpenClaw runs a curl command (embedded in the prompt) to submit results back to OPC → issue moves to `awaiting_approval`. The prompt includes the issue ID, API key, and exact curl command that OpenClaw needs to call back.
 
@@ -341,6 +357,45 @@ Response:
 }
 ```
 
+### Project Planner
+
+A planner agent takes a high-level goal, breaks it down into issues with dependencies, and creates them via OPC's API. All created issues start in **backlog** — agents aren't triggered until you review and approve the plan.
+
+```bash
+curl -X POST http://localhost:3100/api/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Project Planner",
+    "title": "Project Manager",
+    "adapter_type": "openclaw",
+    "adapter_config": {
+      "webhook_url": "http://127.0.0.1:18789/hooks/agent",
+      "token": "your-openclaw-token",
+      "planner": true
+    }
+  }'
+```
+
+Then assign a planning task:
+
+```bash
+curl -X POST http://localhost:3100/api/issues \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Plan the landing page project",
+    "description": "Break this down into tasks: write marketing copy, build the frontend, write tests. Assign each task to the most appropriate agent. Use https://github.com/yourorg/landing-page.git as the repo.",
+    "assignee_id": "planner-agent-uuid"
+  }'
+```
+
+When `planner: true` is set, OPC includes a list of available agents and curl command templates for creating projects and issues in the agent's prompt. The planner:
+
+1. Creates a project (with optional `repo_url`)
+2. Creates issues with dependencies (`parent_issue_id`) and assigns them to agents
+3. Submits a summary of the plan for your approval
+
+You review the plan in the approval queue. All created issues are in backlog — you decide when to kick things off.
+
 ## Agent API
 
 External agents authenticate with their API key (`Authorization: Bearer opc_...`) and use these endpoints:
@@ -349,11 +404,14 @@ External agents authenticate with their API key (`Authorization: Bearer opc_...`
 |----------|--------|-------------|
 | `/api/agent/me` | `GET` | Get the agent's own identity |
 | `/api/agent/assignments` | `GET` | List assigned issues the agent can pick up |
+| `/api/agent/agents` | `GET` | List available colleague agents (id, name, title, role) |
+| `/api/agent/issues` | `POST` | Create an issue (starts in backlog) |
 | `/api/agent/issues/{id}/checkout` | `POST` | Atomically check out a task (prevents other agents from taking it) |
 | `/api/agent/issues/{id}/checkin` | `POST` | Release a checked-out task without submitting |
 | `/api/agent/issues/{id}/submit` | `POST` | Submit completed work for human approval |
 | `/api/agent/issues/{id}/comments` | `GET` | Read the comment thread (including human feedback) |
 | `/api/agent/issues/{id}/comments` | `POST` | Post a comment on the issue |
+| `/api/agent/projects` | `POST` | Create a project (used by planner agents) |
 
 ### Typical Agent Workflow
 
