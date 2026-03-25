@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}{{ issue.title }} - OPC{% endblock %}
+{% block body %}
+<div class="layout">
+    {% let active = "issues" %}
+    {% include "components/sidebar.html" %}
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>{{ issue.title }}</h1>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; align-items: center;">
+                    <span class="badge-status badge-{{ issue.status }}">{{ issue.status }}</span>
+                    <span style="color: var(--text-muted); font-size: 0.8rem;">{{ issue.priority }} priority</span>
+                    {% if let Some(a) = assignee %}
+                    <span style="color: var(--text-muted); font-size: 0.8rem;">assigned to <a href="/agents/{{ a.id }}">{{ a.name }}</a></span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if let Some(appr) = approval %}
+        <div class="card" style="border-color: var(--yellow);">
+            <div class="card-header">
+                <span class="card-title" style="color: var(--yellow);">Awaiting Your Approval</span>
+            </div>
+            <p style="font-size: 0.875rem; margin-bottom: 0.75rem;">{{ appr.summary }}</p>
+            <div class="form-group">
+                <textarea id="review-comment" class="form-textarea" placeholder="Optional feedback..." rows="2"></textarea>
+            </div>
+            <div class="approval-actions">
+                <button class="btn btn-green"
+                    hx-post="/api/approvals/{{ appr.id }}/approve"
+                    hx-vals='js:{"comment": document.getElementById("review-comment").value}'
+                    hx-swap="none"
+                    hx-on::after-request="location.reload()">
+                    Approve
+                </button>
+                <button class="btn btn-yellow"
+                    hx-post="/api/approvals/{{ appr.id }}/request-changes"
+                    hx-vals='js:{"comment": document.getElementById("review-comment").value}'
+                    hx-swap="none"
+                    hx-on::after-request="location.reload()">
+                    Request Changes
+                </button>
+                <button class="btn btn-red"
+                    hx-post="/api/approvals/{{ appr.id }}/reject"
+                    hx-vals='js:{"comment": document.getElementById("review-comment").value}'
+                    hx-swap="none"
+                    hx-on::after-request="location.reload()">
+                    Reject
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if let Some(desc) = issue.description %}
+        <div class="card">
+            <div class="card-title" style="margin-bottom: 0.5rem;">Description</div>
+            <div style="font-size: 0.875rem; white-space: pre-wrap;">{{ desc }}</div>
+        </div>
+        {% endif %}
+
+        {% if !children.is_empty() %}
+        <div class="card">
+            <div class="card-title" style="margin-bottom: 0.5rem;">Sub-tasks</div>
+            <table>
+                <thead><tr><th>Title</th><th>Status</th><th>Assignee</th></tr></thead>
+                <tbody>
+                    {% for child in children %}
+                    <tr>
+                        <td><a href="/issues/{{ child.id }}">{{ child.title }}</a></td>
+                        <td><span class="badge-status badge-{{ child.status }}">{{ child.status }}</span></td>
+                        <td>
+                            {% match child.assignee_id %}
+                            {% when Some with (aid) %}
+                                {% for a in agents %}{% if a.id.to_string() == aid.to_string() %}{{ a.name }}{% endif %}{% endfor %}
+                            {% when None %}-
+                            {% endmatch %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Comments</span>
+            </div>
+            <div class="comment-thread" id="comments">
+                {% for comment in comments %}
+                <div class="comment comment-{{ comment.author_type }}">
+                    <div class="comment-meta">
+                        <strong>{{ comment.author_name }}</strong>
+                        <span>({{ comment.author_type }})</span>
+                        &middot; {{ comment.created_at.format("%Y-%m-%d %H:%M") }}
+                    </div>
+                    <div class="comment-body">{{ comment.body }}</div>
+                </div>
+                {% endfor %}
+                {% if comments.is_empty() %}
+                <div class="empty-state" style="padding: 1rem;"><p>No comments yet</p></div>
+                {% endif %}
+            </div>
+
+            <form style="margin-top: 1rem;"
+                  hx-post="/api/issues/{{ issue.id }}/comments"
+                  hx-target="#comments"
+                  hx-swap="beforeend"
+                  hx-on::after-request="this.reset()">
+                <div class="form-group">
+                    <textarea name="body" class="form-textarea" placeholder="Add a comment..." rows="3" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Post Comment</button>
+            </form>
+        </div>
+    </main>
+</div>
+{% endblock %}

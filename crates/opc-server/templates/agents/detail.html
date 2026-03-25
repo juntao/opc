@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ agent.name }} - OPC{% endblock %}
+{% block body %}
+<div class="layout">
+    {% let active = "agents" %}
+    {% include "components/sidebar.html" %}
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>{{ agent.name }}</h1>
+                {% if let Some(title) = agent.title %}
+                <div style="color: var(--text-muted); font-size: 0.875rem;">{{ title }}</div>
+                {% endif %}
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <span class="badge-status badge-{{ agent.status }}">{{ agent.status }}</span>
+                <button class="btn btn-primary btn-sm" hx-post="/api/agents/{{ agent.id }}/invoke" hx-swap="none">Invoke</button>
+                <button class="btn btn-ghost btn-sm" hx-post="/api/agents/{{ agent.id }}/keys" hx-target="#key-result" hx-swap="innerHTML">Generate API Key</button>
+            </div>
+        </div>
+
+        <div id="key-result"></div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+            <div class="card">
+                <div class="card-title" style="margin-bottom: 0.5rem;">Configuration</div>
+                <div style="font-size: 0.875rem;">
+                    <div><strong>Adapter:</strong> {{ agent.adapter_type }}</div>
+                    <div><strong>Role:</strong> {% match agent.role %}{% when Some with (r) %}{{ r }}{% when None %}-{% endmatch %}</div>
+                    {% if let Some(caps) = agent.capabilities %}
+                    <div style="margin-top: 0.5rem;"><strong>Capabilities:</strong><br>{{ caps }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title" style="margin-bottom: 0.5rem;">Budget</div>
+                <div style="font-size: 0.875rem;">
+                    {% if agent.monthly_budget_cents > 0 %}
+                    <div class="stat-value">${{ agent.current_month_spent_cents / 100 }}</div>
+                    <div style="color: var(--text-muted);">of ${{ agent.monthly_budget_cents / 100 }} monthly</div>
+                    {% else %}
+                    <div class="stat-value">Unlimited</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Active Assignments</span>
+            </div>
+            {% if issues.is_empty() %}
+            <div class="empty-state"><p>No active assignments</p></div>
+            {% else %}
+            <table>
+                <thead><tr><th>Title</th><th>Status</th><th>Priority</th></tr></thead>
+                <tbody>
+                    {% for issue in issues %}
+                    <tr>
+                        <td><a href="/issues/{{ issue.id }}">{{ issue.title }}</a></td>
+                        <td><span class="badge-status badge-{{ issue.status }}">{{ issue.status }}</span></td>
+                        <td>{{ issue.priority }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Recent Heartbeats</span>
+            </div>
+            {% if heartbeats.is_empty() %}
+            <div class="empty-state"><p>No execution history</p></div>
+            {% else %}
+            <table>
+                <thead><tr><th>Trigger</th><th>Status</th><th>Started</th><th>Completed</th></tr></thead>
+                <tbody>
+                    {% for hb in heartbeats %}
+                    <tr>
+                        <td>{{ hb.trigger_type }}</td>
+                        <td><span class="badge-status badge-{{ hb.status }}">{{ hb.status }}</span></td>
+                        <td>{{ hb.started_at.format("%Y-%m-%d %H:%M") }}</td>
+                        <td>{% if let Some(c) = hb.completed_at %}{{ c.format("%H:%M:%S") }}{% else %}-{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+    </main>
+</div>
+{% endblock %}

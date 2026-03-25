@@ -1,0 +1,16 @@
+[package]
+name = "opc-cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+opc-core = { workspace = true }
+opc-db = { workspace = true }
+tokio = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+dirs-next = { workspace = true }

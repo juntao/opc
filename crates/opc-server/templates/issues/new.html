@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}New Issue - OPC{% endblock %}
+{% block body %}
+<div class="layout">
+    {% let active = "issues" %}
+    {% include "components/sidebar.html" %}
+    <main class="main">
+        <div class="page-header">
+            <h1>Create Issue</h1>
+        </div>
+        <div class="card" style="max-width: 600px;">
+            <form hx-post="/api/issues" hx-swap="none" hx-on::after-request="if(event.detail.successful) window.location='/issues'">
+                <div class="form-group">
+                    <label class="form-label">Title *</label>
+                    <input type="text" name="title" class="form-input" required placeholder="What needs to be done?">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-textarea" placeholder="Detailed description of the task..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Priority</label>
+                    <select name="priority" class="form-select">
+                        <option value="medium" selected>Medium</option>
+                        <option value="urgent">Urgent</option>
+                        <option value="high">High</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Assign to Agent</label>
+                    <select name="assignee_id" class="form-select">
+                        <option value="">-- Unassigned --</option>
+                        {% for agent in agents %}
+                        <option value="{{ agent.id }}">{{ agent.name }}{% if let Some(t) = agent.title %} ({{ t }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Project</label>
+                    <select name="project_id" class="form-select">
+                        <option value="">-- No Project --</option>
+                        {% for project in projects %}
+                        <option value="{{ project.id }}">{{ project.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Issue</button>
+            </form>
+        </div>
+    </main>
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Review: {{ issue.title }} - OPC{% endblock %}
+{% block body %}
+<div class="layout">
+    {% let active = "approvals" %}
+    {% include "components/sidebar.html" %}
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>Review: {{ issue.title }}</h1>
+                <div style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem;">
+                    Completed by <a href="/agents/{{ agent.id }}">{{ agent.name }}</a>
+                    &middot; {{ approval.created_at.format("%Y-%m-%d %H:%M") }}
+                </div>
+            </div>
+            <span class="badge-status badge-{{ approval.status }}">{{ approval.status }}</span>
+        </div>
+
+        <div class="card">
+            <div class="card-title" style="margin-bottom: 0.5rem;">Agent's Summary</div>
+            <div style="font-size: 0.875rem; white-space: pre-wrap;">{{ approval.summary }}</div>
+        </div>
+
+        {% if let Some(desc) = issue.description %}
+        <div class="card">
+            <div class="card-title" style="margin-bottom: 0.5rem;">Original Task</div>
+            <div style="font-size: 0.875rem; white-space: pre-wrap;">{{ desc }}</div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Conversation</span>
+            </div>
+            <div class="comment-thread">
+                {% for comment in comments %}
+                <div class="comment comment-{{ comment.author_type }}">
+                    <div class="comment-meta">
+                        <strong>{{ comment.author_name }}</strong>
+                        <span>({{ comment.author_type }})</span>
+                        &middot; {{ comment.created_at.format("%Y-%m-%d %H:%M") }}
+                    </div>
+                    <div class="comment-body">{{ comment.body }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% if approval.status == "pending" %}
+        <div class="card" style="border-color: var(--yellow);">
+            <div class="card-title" style="margin-bottom: 0.75rem; color: var(--yellow);">Your Decision</div>
+            <div class="form-group">
+                <label class="form-label">Feedback (optional for approve, required for changes)</label>
+                <textarea id="review-comment" class="form-textarea" placeholder="Your feedback to the agent..." rows="3"></textarea>
+            </div>
+            <div class="approval-actions">
+                <button class="btn btn-green"
+                    hx-post="/api/approvals/{{ approval.id }}/approve"
+                    hx-vals='js:{"comment": document.getElementById("review-comment").value}'
+                    hx-swap="none"
+                    hx-on::after-request="window.location='/approvals'">
+                    Approve
+                </button>
+                <button class="btn btn-yellow"
+                    hx-post="/api/approvals/{{ approval.id }}/request-changes"
+                    hx-vals='js:{"comment": document.getElementById("review-comment").value}'
+                    hx-swap="none"
+                    hx-on::after-request="window.location='/approvals'">
+                    Request Changes
+                </button>
+                <button class="btn btn-red"
+                    hx-post="/api/approvals/{{ approval.id }}/reject"
+                    hx-vals='js:{"comment": document.getElementById("review-comment").value}'
+                    hx-swap="none"
+                    hx-on::after-request="window.location='/approvals'">
+                    Reject
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}

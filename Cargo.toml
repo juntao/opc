@@ -1,0 +1,73 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/opc-server",
+    "crates/opc-db",
+    "crates/opc-core",
+    "crates/opc-agents",
+    "crates/opc-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework
+axum = { version = "0.8", features = ["macros"] }
+axum-extra = { version = "0.10", features = ["cookie", "typed-header"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "cors", "compression-gzip", "trace"] }
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
+pg-embed = { version = "0.7", features = ["rt_tokio"] }
+
+# Templating
+askama = "0.12"
+askama_axum = "0.4"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Auth
+argon2 = "0.5"
+
+# IDs and time
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Scheduling
+tokio-cron-scheduler = "0.13"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Misc
+rand = "0.8"
+hex = "0.4"
+dirs-next = "2"
+async-stream = "0.3"
+futures = "0.3"
+async-trait = "0.1"
+
+# Workspace crates
+opc-db = { path = "crates/opc-db" }
+opc-core = { path = "crates/opc-core" }
+opc-agents = { path = "crates/opc-agents" }

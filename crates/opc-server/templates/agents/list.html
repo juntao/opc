@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Agents - OPC{% endblock %}
+{% block body %}
+<div class="layout">
+    {% let active = "agents" %}
+    {% include "components/sidebar.html" %}
+    <main class="main">
+        <div class="page-header">
+            <h1>Agents</h1>
+            <a href="/agents/new" class="btn btn-primary">+ New Agent</a>
+        </div>
+
+        {% if agents.is_empty() %}
+        <div class="card">
+            <div class="empty-state">
+                <div class="empty-state-icon">&#129302;</div>
+                <p>No agents yet. Create one to get started.</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="card" style="padding: 0;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Adapter</th>
+                        <th>Status</th>
+                        <th>Budget</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for agent in agents %}
+                    <tr>
+                        <td>
+                            <a href="/agents/{{ agent.id }}"><strong>{{ agent.name }}</strong></a>
+                            {% if let Some(title) = agent.title %}
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">{{ title }}</div>
+                            {% endif %}
+                        </td>
+                        <td>{% match agent.role %}{% when Some with (r) %}{{ r }}{% when None %}-{% endmatch %}</td>
+                        <td>{{ agent.adapter_type }}</td>
+                        <td><span class="badge-status badge-{{ agent.status }}">{{ agent.status }}</span></td>
+                        <td>
+                            {% if agent.monthly_budget_cents > 0 %}
+                            ${{ agent.current_month_spent_cents / 100 }} / ${{ agent.monthly_budget_cents / 100 }}
+                            {% else %}
+                            unlimited
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-ghost btn-sm" hx-post="/api/agents/{{ agent.id }}/invoke" hx-swap="none">Invoke</button>
+                            {% if agent.status == "paused" %}
+                            <button class="btn btn-ghost btn-sm" hx-post="/api/agents/{{ agent.id }}/resume" hx-swap="none">Resume</button>
+                            {% else %}
+                            <button class="btn btn-ghost btn-sm" hx-post="/api/agents/{{ agent.id }}/pause" hx-swap="none">Pause</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}
