@@ -36,7 +36,7 @@ use uuid::Uuid;
 /// on its own tokio runtime (sqlx 0.6 pools are runtime-bound).
 static DB_URL: OnceLock<String> = OnceLock::new();
 
-/// Start embedded PG once (or reuse from a previous run), return the database URL.
+/// Start embedded PG once, return the database URL.
 /// Each test creates its own pool from this URL on its own runtime.
 fn get_database_url() -> String {
     DB_URL
@@ -48,29 +48,23 @@ fn get_database_url() -> String {
                         .ok()
                         .and_then(|p| p.parse().ok())
                         .unwrap_or(15432);
-                    let database_url = format!("postgresql://opc:opc@localhost:{}/opc", pg_port);
 
-                    // Try connecting to an existing PG first (from a previous test run)
-                    let need_start = sqlx::postgres::PgPoolOptions::new()
-                        .max_connections(1)
-                        .acquire_timeout(std::time::Duration::from_secs(2))
-                        .connect(&database_url)
-                        .await
-                        .is_err();
+                    // Clean up any leftover PG from a previous test run.
+                    // Orphaned PG processes hold the port but may not accept connections.
+                    kill_process_on_port(pg_port);
+                    let data_dir = std::env::temp_dir().join("opc_test_shared");
+                    let _ = std::fs::remove_dir_all(&data_dir);
 
-                    if need_start {
-                        let data_dir = std::env::temp_dir().join("opc_test_shared");
-                        let (pg, _) =
-                            opc_db::embedded::start_embedded_postgres(Some(data_dir), pg_port)
-                                .await
-                                .expect("Failed to start embedded PostgreSQL");
-                        std::mem::forget(pg);
-                    }
+                    let (pg, database_url) =
+                        opc_db::embedded::start_embedded_postgres(Some(data_dir), pg_port)
+                            .await
+                            .expect("Failed to start embedded PostgreSQL");
+                    std::mem::forget(pg);
 
-                    // Run migrations (idempotent)
+                    // Run migrations
                     let pool = opc_db::create_pool(&database_url)
                         .await
-                        .expect("Failed to create pool");
+                        .expect("Failed to connect to PostgreSQL");
                     opc_db::migrate::run_migrations(&pool)
                         .await
                         .expect("Failed to run migrations");
@@ -86,6 +80,24 @@ fn get_database_url() -> String {
             .expect("Database init thread panicked")
         })
         .clone()
+}
+
+/// Kill any process listening on the given port (cleanup from previous test runs).
+fn kill_process_on_port(port: u16) {
+    let output = std::process::Command::new("lsof")
+        .args(["-ti", &format!(":{}", port)])
+        .output();
+    if let Ok(output) = output {
+        let pids = String::from_utf8_lossy(&output.stdout);
+        for pid in pids.split_whitespace() {
+            let _ = std::process::Command::new("kill")
+                .args(["-TERM", pid])
+                .output();
+        }
+        if !pids.is_empty() {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
 }
 
 /// Create a fresh pool on the current runtime.
