@@ -105,6 +105,7 @@ pub struct Issue {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateIssue {
+    #[serde(default)]
     pub company_id: Uuid,
     pub project_id: Option<Uuid>,
     pub title: String,

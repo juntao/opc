@@ -28,3 +28,10 @@ rand = { workspace = true }
 hex = { workspace = true }
 async-stream = { workspace = true }
 futures = { workspace = true }
+http = "1"
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { workspace = true, features = ["util"] }
+pg-embed = { workspace = true }
+rand = { workspace = true }

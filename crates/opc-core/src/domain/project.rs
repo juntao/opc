@@ -16,6 +16,7 @@ pub struct Project {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateProject {
+    #[serde(default)]
     pub company_id: Uuid,
     pub name: String,
     pub description: Option<String>,
