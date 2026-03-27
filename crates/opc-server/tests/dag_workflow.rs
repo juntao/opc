@@ -48,17 +48,15 @@ fn get_database_url() -> String {
                         .ok()
                         .and_then(|p| p.parse().ok())
                         .unwrap_or(15432);
-                    let database_url =
-                        format!("postgresql://opc:opc@localhost:{}/opc", pg_port);
+                    let database_url = format!("postgresql://opc:opc@localhost:{}/opc", pg_port);
 
                     // Try connecting to an existing PG first (from a previous test run)
-                    let need_start =
-                        sqlx::postgres::PgPoolOptions::new()
-                            .max_connections(1)
-                            .acquire_timeout(std::time::Duration::from_secs(2))
-                            .connect(&database_url)
-                            .await
-                            .is_err();
+                    let need_start = sqlx::postgres::PgPoolOptions::new()
+                        .max_connections(1)
+                        .acquire_timeout(std::time::Duration::from_secs(2))
+                        .connect(&database_url)
+                        .await
+                        .is_err();
 
                     if need_start {
                         let data_dir = std::env::temp_dir().join("opc_test_shared");
