@@ -14,7 +14,7 @@
 //!   D    (blocked_by: [B, C] — fan-in)
 //! ```
 //!
-//! Run with: cargo test -p opc-server --test dag_workflow -- --test-threads=1
+//! Run with: cargo test -p opc-server --test dag_workflow
 
 use axum::body::Body;
 use http::Request;
@@ -22,9 +22,83 @@ use http_body_util::BodyExt;
 use opc_core::events::EventBus;
 use opc_server::state::AppState;
 use serde_json::Value;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tower::ServiceExt;
 use uuid::Uuid;
+
+// ─── Shared database ────────────────────────────────────────────────────
+//
+// All tests share a single embedded PostgreSQL instance. Each test creates
+// its own company, user, and app state for isolation. This avoids port
+// conflicts, duplicate PG downloads, and lets tests run in parallel.
+
+/// Stores just the database URL so each test can create its own pool
+/// on its own tokio runtime (sqlx 0.6 pools are runtime-bound).
+static DB_URL: OnceLock<String> = OnceLock::new();
+
+/// Start embedded PG once (or reuse from a previous run), return the database URL.
+/// Each test creates its own pool from this URL on its own runtime.
+fn get_database_url() -> String {
+    DB_URL
+        .get_or_init(|| {
+            std::thread::spawn(|| {
+                let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+                let url = rt.block_on(async {
+                    let pg_port: u16 = std::env::var("PG_TEST_PORT")
+                        .ok()
+                        .and_then(|p| p.parse().ok())
+                        .unwrap_or(15432);
+                    let database_url =
+                        format!("postgresql://opc:opc@localhost:{}/opc", pg_port);
+
+                    // Try connecting to an existing PG first (from a previous test run)
+                    let need_start =
+                        sqlx::postgres::PgPoolOptions::new()
+                            .max_connections(1)
+                            .acquire_timeout(std::time::Duration::from_secs(2))
+                            .connect(&database_url)
+                            .await
+                            .is_err();
+
+                    if need_start {
+                        let data_dir = std::env::temp_dir().join("opc_test_shared");
+                        let (pg, _) =
+                            opc_db::embedded::start_embedded_postgres(Some(data_dir), pg_port)
+                                .await
+                                .expect("Failed to start embedded PostgreSQL");
+                        std::mem::forget(pg);
+                    }
+
+                    // Run migrations (idempotent)
+                    let pool = opc_db::create_pool(&database_url)
+                        .await
+                        .expect("Failed to create pool");
+                    opc_db::migrate::run_migrations(&pool)
+                        .await
+                        .expect("Failed to run migrations");
+                    pool.close().await;
+
+                    database_url
+                });
+                // Leak runtime so embedded PG process stays alive
+                std::mem::forget(rt);
+                url
+            })
+            .join()
+            .expect("Database init thread panicked")
+        })
+        .clone()
+}
+
+/// Create a fresh pool on the current runtime.
+async fn create_test_pool() -> sqlx::PgPool {
+    let url = get_database_url();
+    sqlx::postgres::PgPoolOptions::new()
+        .max_connections(20)
+        .connect(&url)
+        .await
+        .expect("Failed to create test pool")
+}
 
 // ─── Test helpers ────────────────────────────────────────────────────────
 
@@ -77,44 +151,19 @@ async fn get_issue_status(app: &axum::Router, user_id: Uuid, issue_id: Uuid) -> 
         .to_string()
 }
 
-/// Set up a test environment: start embedded PG, run migrations, create company + admin user,
-/// start the event listener, and build the app. Returns everything needed for testing.
-///
-/// The embedded PG data is stored in a unique temp directory and runs on a random port.
-/// The returned `_pg_handle` must be kept alive for the duration of the test.
+/// Per-test environment. Each test gets its own company, user, event bus,
+/// and app instance — all sharing the same database pool.
 struct TestEnv {
     app: axum::Router,
     #[allow(dead_code)]
     state: AppState,
     user_id: Uuid,
-    // Keep PG alive — when this drops, the embedded PG stops
-    #[allow(dead_code)]
-    _pg_handle: pg_embed::postgres::PgEmbed,
 }
 
 async fn setup_test_env() -> TestEnv {
-    // Use a random high port to avoid conflicts
-    let pg_port: u16 = 15000 + (rand::random::<u16>() % 10000);
+    let pool = create_test_pool().await;
 
-    // Use a unique temp directory for this test's database
-    let data_dir = std::env::temp_dir()
-        .join("opc_test")
-        .join(Uuid::new_v4().to_string());
-
-    let (pg_handle, database_url) =
-        opc_db::embedded::start_embedded_postgres(Some(data_dir), pg_port)
-            .await
-            .expect("Failed to start embedded PostgreSQL");
-
-    let pool = opc_db::create_pool(&database_url)
-        .await
-        .expect("Failed to create pool");
-
-    opc_db::migrate::run_migrations(&pool)
-        .await
-        .expect("Failed to run migrations");
-
-    // Create company
+    // Each test gets a unique company for isolation
     let company = opc_db::queries::companies::create_company(
         &pool,
         &format!("TestCompany-{}", Uuid::new_v4()),
@@ -124,7 +173,6 @@ async fn setup_test_env() -> TestEnv {
     .await
     .expect("Failed to create company");
 
-    // Create admin user
     let password_hash = opc_server::routes::auth::hash_password("testpass").unwrap();
     let user = opc_db::queries::users::create_user(
         &pool,
@@ -157,7 +205,6 @@ async fn setup_test_env() -> TestEnv {
         app,
         state,
         user_id: user.id,
-        _pg_handle: pg_handle,
     }
 }
 
