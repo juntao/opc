@@ -58,7 +58,7 @@ The AI figures out which agent to assign to each task based on each agent's titl
 
 Open the OPC dashboard, go to **Projects**, and click on your new project. Review the issues, descriptions, and assignments. When you're satisfied, click **Approve Project**.
 
-This activates all root-level issues (those without a parent) and dispatches their assigned agents. Child issues remain in backlog until their parent is approved.
+This activates all root-level issues (those with no `blocked_by` dependencies) and dispatches their assigned agents. Downstream issues remain in backlog until all their blockers are approved.
 
 If the plan isn't right, you can **delete** the project — this cascades and removes all issues and related data.
 
@@ -66,7 +66,7 @@ If the plan isn't right, you can **delete** the project — this cascades and re
 
 As agents complete their work, issues appear in your **Approval Queue** (`/approvals`). For each submission, you can:
 
-- **Approve** — marks the issue as done and triggers any child issues assigned to other agents
+- **Approve** — marks the issue as done and triggers any downstream issues whose blockers are all resolved
 - **Request Changes** — sends feedback to the agent, who re-works and re-submits
 - **Reassign** — transfers the task to a different agent
 - **Reject** — cancels the task
@@ -79,7 +79,7 @@ Once all issues are approved, the project is complete.
 
 ```
 Chat with AI → Project + issues created → Approve project → Agents work →
-You approve each issue → Child agents triggered → Repeat → All done
+You approve each issue → Downstream agents triggered → Repeat → All done
 ```
 
 ### Alternative: Create projects manually
@@ -87,7 +87,7 @@ You approve each issue → Child agents triggered → Repeat → All done
 Instead of using the planning skill, you can create projects and issues directly in the admin UI:
 
 1. Go to **Projects** > **+ New Project** — enter a name, description, and optional repository URL
-2. Go to **Issues** > **New Issue** — create issues linked to the project, assign agents, and set parent-child dependencies
+2. Go to **Issues** > **New Issue** — create issues linked to the project, assign agents, and set `blocked_by` dependencies
 3. Go to the project detail page and click **Approve Project** to kick off all agents
 
 This gives you full manual control over the project structure. Issues under a draft project are held in **backlog** until the project is approved.
@@ -159,9 +159,9 @@ Every agent in OPC follows the same lifecycle, regardless of adapter type:
 
 The key rule: **agents never see issues in `awaiting_approval` status.** They can only pick up `todo`, `approved`, or `changes_requested` issues. This ensures the human always gates the workflow.
 
-### Task Dependencies
+### Task Dependencies (blocked_by)
 
-Issues can form parent-child hierarchies via `parent_issue_id`. Child issues are only triggered when their parent is approved. Multiple children can share the same parent — they all start in parallel once the parent is approved. Each agent sees its own task, the project description, the parent task context, and the comment thread.
+Issues form a DAG (directed acyclic graph) via `blocked_by`. An issue can be blocked by **multiple** other issues and is only triggered when **all** of its blockers are approved. This supports sequential chains, fan-out (one task triggers many), and fan-in (one task waits for many prerequisites). Each agent sees its own task, the project description, and the descriptions + comments from all completed blocking issues as context.
 
 ### Where Does the Code Go?
 
@@ -174,7 +174,7 @@ To bridge this gap, set `repo_url` on the **project**. When a project has a `rep
 Agents are triggered automatically by system events:
 
 - **Project Approved** — root-level issues are activated and agents are dispatched
-- **Issue Approved** — child issues are activated and their agents are dispatched
+- **Issue Approved** — downstream issues with all blockers resolved are activated and their agents are dispatched
 - **Changes Requested** — the assigned agent re-wakes with your feedback
 - **Manual** — you click "Invoke" on an agent in the dashboard
 
@@ -238,7 +238,7 @@ For custom agents, OPC POSTs the full task context to your webhook URL. Your age
   "issue": { "id": "...", "title": "Fix the login bug", "description": "..." },
   "project": { "id": "...", "name": "My Project", "description": "..." },
   "comments": [{ "author_name": "admin", "body": "Check the logout flow too" }],
-  "parent_chain": [],
+  "resolved_dependencies": [],
   "trigger": "assignment",
   "api_base_url": "http://localhost:3100",
   "api_key": ""
@@ -268,7 +268,7 @@ Open **http://localhost:3100** in your browser and log in (`admin` / `admin`).
 | **Agents** | `/agents` | View all agents, their status, and quick actions (pause, resume, invoke) |
 | **Agent Detail** | `/agents/{id}` | See an agent's config, budget, current assignments, and heartbeat history. Generate API keys |
 | **Issues** | `/issues` | List all issues. Filter by status (todo, in progress, awaiting approval, done) |
-| **Issue Detail** | `/issues/{id}` | View issue details, comment thread, sub-tasks, and inline approval widget |
+| **Issue Detail** | `/issues/{id}` | View issue details, comment thread, dependencies (blocked by / blocks), and inline approval widget |
 | **Approval Queue** | `/approvals` | Review all pending agent submissions. Approve, request changes, reassign, or reject |
 | **Approval Detail** | `/approvals/{id}` | Full review page with the agent's summary, original task, conversation thread, and action buttons |
 | **Projects** | `/projects` | Organize issues into projects. Approve draft projects to kick off agents |
@@ -352,7 +352,7 @@ curl -X POST http://localhost:3100/api/issues \
   }'
 # Returns: {"id": "issue-copy-uuid", ...}
 
-# Create a child issue (depends on parent)
+# Create a dependent issue (blocked by the copy issue)
 curl -X POST http://localhost:3100/api/issues \
   -H "Content-Type: application/json" \
   -d '{
@@ -360,7 +360,7 @@ curl -X POST http://localhost:3100/api/issues \
     "description": "Create a responsive landing page using the approved copy.",
     "priority": "high",
     "project_id": "project-uuid",
-    "parent_issue_id": "issue-copy-uuid",
+    "blocked_by": ["issue-copy-uuid"],
     "assignee_id": "agent-alice-uuid"
   }'
 
@@ -415,6 +415,24 @@ curl -X POST -H "Authorization: Bearer $KEY" \
   -d '{"summary": "Fixed login bug by correcting session validation logic", "artifacts": null}' \
   $API/api/agent/issues/{id}/submit
 ```
+
+## Testing
+
+OPC includes integration tests that exercise the full DAG dependency workflow end-to-end against a real embedded PostgreSQL instance.
+
+```bash
+# Run all integration tests (must use --test-threads=1 for embedded PG)
+cargo test -p opc-server --test dag_workflow -- --test-threads=1
+```
+
+The test suite covers:
+
+- **Diamond DAG workflow** — creates a project with A→{B,C}→D dependencies, approves the project, walks through agent checkout/submit and human approval for each issue, including a request-changes feedback loop. Verifies fan-in: D only activates when both B and C are done.
+- **Fan-out activation** — one root issue fans out to three parallel children, all activate simultaneously on approval.
+- **Rejection** — rejected approval correctly cancels the issue.
+- **Comment thread** — human and agent comments appear together in the correct order.
+
+Each test starts its own embedded PostgreSQL on a random port with a unique temp directory, so tests are fully isolated.
 
 ## License
 

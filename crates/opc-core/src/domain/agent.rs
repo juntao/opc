@@ -88,6 +88,7 @@ pub struct Agent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateAgent {
+    #[serde(default)]
     pub company_id: Uuid,
     pub name: String,
     pub title: Option<String>,

@@ -42,5 +42,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Install and start PostgreSQL
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql postgresql-client
+          sudo systemctl start postgresql
+          sudo -u postgres createuser -s opc
+          sudo -u postgres psql -c "ALTER USER opc PASSWORD 'opc';"
+          sudo -u postgres createdb -O opc opc
       - name: Run tests
+        env:
+          DATABASE_URL: postgresql://opc:opc@localhost:5432/opc
         run: cargo test

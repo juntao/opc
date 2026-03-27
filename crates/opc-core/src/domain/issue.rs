@@ -90,7 +90,6 @@ pub struct Issue {
     pub id: Uuid,
     pub company_id: Uuid,
     pub project_id: Option<Uuid>,
-    pub parent_issue_id: Option<Uuid>,
     pub title: String,
     pub description: Option<String>,
     pub status: String,
@@ -106,13 +105,15 @@ pub struct Issue {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateIssue {
+    #[serde(default)]
     pub company_id: Uuid,
     pub project_id: Option<Uuid>,
-    pub parent_issue_id: Option<Uuid>,
     pub title: String,
     pub description: Option<String>,
     pub priority: Option<String>,
     pub assignee_id: Option<Uuid>,
+    #[serde(default)]
+    pub blocked_by: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,4 +144,11 @@ pub struct CreateComment {
     pub author_id: String,
     pub author_name: String,
     pub body: String,
+}
+
+/// A completed prerequisite issue with its comments, for agent context.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedDependency {
+    pub issue: Issue,
+    pub comments: Vec<IssueComment>,
 }

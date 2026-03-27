@@ -60,18 +60,42 @@
         </div>
         {% endif %}
 
-        {% if !children.is_empty() %}
+        {% if !blocked_by.is_empty() %}
         <div class="card">
-            <div class="card-title" style="margin-bottom: 0.5rem;">Sub-tasks</div>
+            <div class="card-title" style="margin-bottom: 0.5rem;">Blocked By</div>
             <table>
                 <thead><tr><th>Title</th><th>Status</th><th>Assignee</th></tr></thead>
                 <tbody>
-                    {% for child in children %}
+                    {% for dep in blocked_by %}
                     <tr>
-                        <td><a href="/issues/{{ child.id }}">{{ child.title }}</a></td>
-                        <td><span class="badge-status badge-{{ child.status }}">{{ child.status }}</span></td>
+                        <td><a href="/issues/{{ dep.id }}">{{ dep.title }}</a></td>
+                        <td><span class="badge-status badge-{{ dep.status }}">{{ dep.status }}</span></td>
                         <td>
-                            {% match child.assignee_id %}
+                            {% match dep.assignee_id %}
+                            {% when Some with (aid) %}
+                                {% for a in agents %}{% if a.id.to_string() == aid.to_string() %}{{ a.name }}{% endif %}{% endfor %}
+                            {% when None %}-
+                            {% endmatch %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        {% if !blocks.is_empty() %}
+        <div class="card">
+            <div class="card-title" style="margin-bottom: 0.5rem;">Blocks</div>
+            <table>
+                <thead><tr><th>Title</th><th>Status</th><th>Assignee</th></tr></thead>
+                <tbody>
+                    {% for dep in blocks %}
+                    <tr>
+                        <td><a href="/issues/{{ dep.id }}">{{ dep.title }}</a></td>
+                        <td><span class="badge-status badge-{{ dep.status }}">{{ dep.status }}</span></td>
+                        <td>
+                            {% match dep.assignee_id %}
                             {% when Some with (aid) %}
                                 {% for a in agents %}{% if a.id.to_string() == aid.to_string() %}{{ a.name }}{% endif %}{% endfor %}
                             {% when None %}-

@@ -241,7 +241,13 @@ pub async fn agent_create_issue(
     Json(mut input): Json<CreateIssue>,
 ) -> Result<Json<opc_core::domain::Issue>, AppError> {
     input.company_id = agent.company_id;
+    let blocked_by = input.blocked_by.clone();
     let issue = queries::issues::create_issue(&state.pool, &input).await?;
+
+    // Insert dependency edges
+    if !blocked_by.is_empty() {
+        queries::issues::add_dependencies(&state.pool, issue.id, &blocked_by).await?;
+    }
 
     // Force backlog so agents aren't triggered until the human approves
     if issue.status != "backlog" {

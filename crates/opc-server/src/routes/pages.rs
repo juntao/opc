@@ -64,7 +64,8 @@ pub struct IssueDetailTemplate {
     pub user: BoardUser,
     pub issue: Issue,
     pub comments: Vec<IssueComment>,
-    pub children: Vec<Issue>,
+    pub blocked_by: Vec<Issue>,
+    pub blocks: Vec<Issue>,
     pub agents: Vec<Agent>,
     pub assignee: Option<Agent>,
     pub approval: Option<ApprovalRequest>,
@@ -225,7 +226,8 @@ pub async fn issue_detail_page(
         .await?
         .ok_or_else(|| anyhow::anyhow!("Issue not found"))?;
     let comments = queries::comments::list_comments(&state.pool, id).await?;
-    let children = queries::issues::get_children(&state.pool, id).await?;
+    let blocked_by = queries::issues::get_dependencies(&state.pool, id).await?;
+    let blocks = queries::issues::get_dependents(&state.pool, id).await?;
     let agents = queries::agents::list_agents(&state.pool, state.company_id).await?;
 
     let assignee = if let Some(aid) = issue.assignee_id {
@@ -243,7 +245,8 @@ pub async fn issue_detail_page(
         user: user.0,
         issue,
         comments,
-        children,
+        blocked_by,
+        blocks,
         agents,
         assignee,
         approval,

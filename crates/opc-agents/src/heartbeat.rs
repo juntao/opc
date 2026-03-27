@@ -64,7 +64,15 @@ pub async fn execute_heartbeat(
 
     // Get context
     let comments = queries::comments::list_comments(pool, issue.id).await?;
-    let parent_chain = queries::issues::get_parent_chain(pool, issue.id).await?;
+    let resolved_issues = queries::issues::get_resolved_dependency_chain(pool, issue.id).await?;
+    let mut resolved_dependencies = Vec::new();
+    for dep_issue in resolved_issues {
+        let dep_comments = queries::comments::list_comments(pool, dep_issue.id).await?;
+        resolved_dependencies.push(opc_core::domain::ResolvedDependency {
+            issue: dep_issue,
+            comments: dep_comments,
+        });
+    }
     let project = if let Some(pid) = issue.project_id {
         queries::projects::get_project(pool, pid).await?
     } else {
@@ -86,7 +94,7 @@ pub async fn execute_heartbeat(
         issue: issue.clone(),
         project,
         comments,
-        parent_chain,
+        resolved_dependencies,
         available_agents,
         trigger: trigger.to_string(),
         api_base_url: api_base_url.to_string(),
