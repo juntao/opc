@@ -19,11 +19,13 @@ Build a Rust-based platform where:
 opc/
 ├── crates/
 │   ├── opc-server/    # Axum HTTP server, routes, HTMX/Askama templates, SSE
+│   │   ├── src/lib.rs # Router construction (build_app), shared by main and tests
+│   │   └── tests/     # Integration tests (dag_workflow.rs)
 │   ├── opc-db/        # PostgreSQL queries, migrations, embedded PG (pg-embed)
 │   ├── opc-core/      # Domain types, business logic, event bus
 │   ├── opc-agents/    # Agent adapters (HTTP webhook, Claude Code), heartbeat
 │   └── opc-cli/       # CLI management tool
-├── migrations/        # SQL schema migrations (001_initial.sql)
+├── migrations/        # SQL schema migrations (001–007)
 ├── static/            # HTMX, CSS
 └── templates/         # Askama HTML templates
 ```
@@ -84,8 +86,19 @@ cargo clippy
 
 - Domain enums use `as_str()` to serialize and `parse()` to deserialize (not `from_str` to avoid clippy `should_implement_trait` warning)
 - All DB-mapped structs derive `sqlx::FromRow`
+- `Create*` structs use `#[serde(default)]` on `company_id` — the handler sets it from `AppState`, so clients don't send it
 - Askama templates cannot use `&` in patterns, `.as_deref()`, or `|truncate()` — use `{% match %}` blocks for Option fields
 - Template struct fields that hold `Option<String>` for filter params should be plain `String` (empty = no filter)
+- `opc-server` has both `lib.rs` (exports `build_app()` and all modules) and `main.rs` (startup logic only). Integration tests import from the lib crate.
+
+### Testing
+
+```bash
+# Integration tests (requires --test-threads=1 for embedded PG isolation)
+cargo test -p opc-server --test dag_workflow -- --test-threads=1
+```
+
+Integration tests live in `crates/opc-server/tests/`. Each test starts its own embedded PostgreSQL on a random port with a unique temp directory. Tests create agents in **paused** status so heartbeats don't interfere — the event listener handles DAG cascade (issue activation on approval) while agents are exercised via direct API calls.
 
 ## Environment Variables
 
@@ -99,19 +112,22 @@ cargo clippy
 
 ### Complete
 - Cargo workspace with 5 crates
-- Full database schema with migrations
+- Full database schema with 7 migrations
 - Domain types, services, event bus (opc-core)
 - Embedded PostgreSQL setup (opc-db)
 - All query modules with runtime sqlx (opc-db)
-- Agent adapters: HTTP webhook + Claude Code (opc-agents)
+- Agent adapters: HTTP webhook, Claude Code, OpenClaw (opc-agents)
 - Heartbeat system with event-driven triggers (opc-agents)
 - Axum server with auth middleware, SSE (opc-server)
 - HTMX + Askama UI: dashboard, agents, issues, approvals, projects
 - Approval queue with approve/request-changes/reject flow
+- DAG dependency model (blocked_by) with fan-out/fan-in support
+- Project-level approval gate (draft → active)
+- Planning skill for OpenClaw agents
+- Integration test suite (DAG workflow, fan-out, rejection, comments)
 
 ### Not Yet Implemented
 - Cost dashboard and budget enforcement UI
 - Kanban board drag-and-drop view
 - CLI tool (skeleton only)
-- Comprehensive test suite
 - Agent @-mention detection in comments

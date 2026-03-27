@@ -416,6 +416,24 @@ curl -X POST -H "Authorization: Bearer $KEY" \
   $API/api/agent/issues/{id}/submit
 ```
 
+## Testing
+
+OPC includes integration tests that exercise the full DAG dependency workflow end-to-end against a real embedded PostgreSQL instance.
+
+```bash
+# Run all integration tests (must use --test-threads=1 for embedded PG)
+cargo test -p opc-server --test dag_workflow -- --test-threads=1
+```
+
+The test suite covers:
+
+- **Diamond DAG workflow** — creates a project with A→{B,C}→D dependencies, approves the project, walks through agent checkout/submit and human approval for each issue, including a request-changes feedback loop. Verifies fan-in: D only activates when both B and C are done.
+- **Fan-out activation** — one root issue fans out to three parallel children, all activate simultaneously on approval.
+- **Rejection** — rejected approval correctly cancels the issue.
+- **Comment thread** — human and agent comments appear together in the correct order.
+
+Each test starts its own embedded PostgreSQL on a random port with a unique temp directory, so tests are fully isolated.
+
 ## License
 
 MIT
