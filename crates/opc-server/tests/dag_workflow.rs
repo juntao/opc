@@ -36,48 +36,68 @@ use uuid::Uuid;
 /// on its own tokio runtime (sqlx 0.6 pools are runtime-bound).
 static DB_URL: OnceLock<String> = OnceLock::new();
 
-/// Start embedded PG once, return the database URL.
+/// Get a database URL, using `DATABASE_URL` env var if set (CI with service
+/// container), otherwise starting embedded PG (local dev).
 /// Each test creates its own pool from this URL on its own runtime.
 fn get_database_url() -> String {
     DB_URL
         .get_or_init(|| {
-            std::thread::spawn(|| {
-                let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
-                let url = rt.block_on(async {
-                    let pg_port: u16 = std::env::var("PG_TEST_PORT")
-                        .ok()
-                        .and_then(|p| p.parse().ok())
-                        .unwrap_or(15432);
-
-                    // Clean up any leftover PG from a previous test run.
-                    // Orphaned PG processes hold the port but may not accept connections.
-                    kill_process_on_port(pg_port);
-                    let data_dir = std::env::temp_dir().join("opc_test_shared");
-                    let _ = std::fs::remove_dir_all(&data_dir);
-
-                    let (pg, database_url) =
-                        opc_db::embedded::start_embedded_postgres(Some(data_dir), pg_port)
+            // CI provides DATABASE_URL via a PostgreSQL service container
+            if let Ok(url) = std::env::var("DATABASE_URL") {
+                // Just run migrations against the external PG
+                std::thread::spawn(move || {
+                    let rt = tokio::runtime::Runtime::new().expect("runtime");
+                    rt.block_on(async {
+                        let pool = opc_db::create_pool(&url)
                             .await
-                            .expect("Failed to start embedded PostgreSQL");
-                    std::mem::forget(pg);
+                            .expect("Failed to connect to DATABASE_URL");
+                        opc_db::migrate::run_migrations(&pool)
+                            .await
+                            .expect("Failed to run migrations");
+                        pool.close().await;
+                    });
+                    url
+                })
+                .join()
+                .expect("Migration thread panicked")
+            } else {
+                // Local dev: start embedded PG
+                std::thread::spawn(|| {
+                    let rt = tokio::runtime::Runtime::new().expect("runtime");
+                    let url = rt.block_on(async {
+                        let pg_port: u16 = std::env::var("PG_TEST_PORT")
+                            .ok()
+                            .and_then(|p| p.parse().ok())
+                            .unwrap_or(15432);
 
-                    // Run migrations
-                    let pool = opc_db::create_pool(&database_url)
-                        .await
-                        .expect("Failed to connect to PostgreSQL");
-                    opc_db::migrate::run_migrations(&pool)
-                        .await
-                        .expect("Failed to run migrations");
-                    pool.close().await;
+                        // Clean up any orphaned PG from a previous test run
+                        kill_process_on_port(pg_port);
+                        let data_dir = std::env::temp_dir().join("opc_test_shared");
+                        let _ = std::fs::remove_dir_all(&data_dir);
 
-                    database_url
-                });
-                // Leak runtime so embedded PG process stays alive
-                std::mem::forget(rt);
-                url
-            })
-            .join()
-            .expect("Database init thread panicked")
+                        let (pg, database_url) =
+                            opc_db::embedded::start_embedded_postgres(Some(data_dir), pg_port)
+                                .await
+                                .expect("Failed to start embedded PostgreSQL");
+                        std::mem::forget(pg);
+
+                        let pool = opc_db::create_pool(&database_url)
+                            .await
+                            .expect("Failed to connect to PostgreSQL");
+                        opc_db::migrate::run_migrations(&pool)
+                            .await
+                            .expect("Failed to run migrations");
+                        pool.close().await;
+
+                        database_url
+                    });
+                    // Leak runtime so embedded PG process stays alive
+                    std::mem::forget(rt);
+                    url
+                })
+                .join()
+                .expect("Database init thread panicked")
+            }
         })
         .clone()
 }
