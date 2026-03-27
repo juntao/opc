@@ -48,7 +48,10 @@ fn get_database_url() -> String {
                 std::thread::spawn(move || {
                     let rt = tokio::runtime::Runtime::new().expect("runtime");
                     rt.block_on(async {
-                        let pool = opc_db::create_pool(&url)
+                        let pool = sqlx::postgres::PgPoolOptions::new()
+                            .max_connections(5)
+                            .acquire_timeout(std::time::Duration::from_secs(5))
+                            .connect(&url)
                             .await
                             .expect("Failed to connect to DATABASE_URL");
                         opc_db::migrate::run_migrations(&pool)
@@ -120,11 +123,13 @@ fn kill_process_on_port(port: u16) {
     }
 }
 
-/// Create a fresh pool on the current runtime.
+/// Create a fresh pool on the current runtime with a short connect timeout
+/// so tests fail fast instead of hanging if PG is unreachable.
 async fn create_test_pool() -> sqlx::PgPool {
     let url = get_database_url();
     sqlx::postgres::PgPoolOptions::new()
         .max_connections(20)
+        .acquire_timeout(std::time::Duration::from_secs(5))
         .connect(&url)
         .await
         .expect("Failed to create test pool")

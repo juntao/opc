@@ -38,24 +38,18 @@ jobs:
     name: Test
     runs-on: ubuntu-24.04-arm
     needs: build
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: opc
-          POSTGRES_PASSWORD: opc
-          POSTGRES_DB: opc
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Install and start PostgreSQL
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql postgresql-client
+          sudo systemctl start postgresql
+          sudo -u postgres createuser -s opc
+          sudo -u postgres psql -c "ALTER USER opc PASSWORD 'opc';"
+          sudo -u postgres createdb -O opc opc
       - name: Run tests
         env:
           DATABASE_URL: postgresql://opc:opc@localhost:5432/opc
