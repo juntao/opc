@@ -38,25 +38,33 @@ async fn handle_event(state: &AppState, event: OpcEvent) -> anyhow::Result<()> {
         } => {
             match status.as_str() {
                 "approved" => {
-                    // Check if there are child issues with assigned agents
-                    let children = queries::issues::get_children(&state.pool, issue_id).await?;
-                    for child in children {
-                        if let Some(assignee_id) = child.assignee_id {
-                            info!(
-                                "Approval granted, triggering downstream agent {}",
-                                assignee_id
-                            );
-                            trigger_agent_heartbeat(state, assignee_id, "approval").await?;
-                        }
-                    }
-                    // Also mark the issue as done if it was the final step
-                    let issue = queries::issues::get_issue(&state.pool, issue_id).await?;
-                    if let Some(_issue) = issue {
-                        let children = queries::issues::get_children(&state.pool, issue_id).await?;
-                        if children.is_empty() {
-                            // Leaf issue, mark done
-                            queries::issues::update_issue_status(&state.pool, issue_id, "done")
-                                .await?;
+                    // Mark the approved issue as done
+                    queries::issues::update_issue_status(&state.pool, issue_id, "done").await?;
+
+                    // Find all issues that depend on this one
+                    let dependents = queries::issues::get_dependents(&state.pool, issue_id).await?;
+                    for dependent in dependents {
+                        let all_resolved = queries::issues::are_all_dependencies_resolved(
+                            &state.pool,
+                            dependent.id,
+                        )
+                        .await?;
+                        if all_resolved {
+                            if let Some(assignee_id) = dependent.assignee_id {
+                                if dependent.status == "backlog" {
+                                    queries::issues::update_issue_status(
+                                        &state.pool,
+                                        dependent.id,
+                                        "todo",
+                                    )
+                                    .await?;
+                                }
+                                info!(
+                                    "All dependencies resolved for issue {}, triggering agent {}",
+                                    dependent.id, assignee_id
+                                );
+                                trigger_agent_heartbeat(state, assignee_id, "approval").await?;
+                            }
                         }
                     }
                 }

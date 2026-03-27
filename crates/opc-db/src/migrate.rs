@@ -42,6 +42,10 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
             "006_project_approval_and_updates",
             include_str!("../../../migrations/006_project_approval_and_updates.sql"),
         ),
+        (
+            "007_issue_dependencies",
+            include_str!("../../../migrations/007_issue_dependencies.sql"),
+        ),
     ];
 
     for (name, sql) in migrations {

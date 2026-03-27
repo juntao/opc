@@ -97,16 +97,24 @@ impl OpenClawAdapter {
             ));
         }
 
-        if !context.parent_chain.is_empty() {
-            prompt.push_str("## Parent task context\n");
-            for parent in &context.parent_chain {
+        if !context.resolved_dependencies.is_empty() {
+            prompt.push_str("## Completed prerequisite tasks\n\n");
+            for dep in &context.resolved_dependencies {
                 prompt.push_str(&format!(
-                    "- {}: {}\n",
-                    parent.title,
-                    parent.description.as_deref().unwrap_or("")
+                    "### {} [{}]\n{}\n",
+                    dep.issue.title,
+                    dep.issue.status,
+                    dep.issue.description.as_deref().unwrap_or("")
                 ));
+                let recent: Vec<_> = dep.comments.iter().rev().take(3).collect();
+                for comment in recent.into_iter().rev() {
+                    prompt.push_str(&format!(
+                        "> [{}] {}: {}\n",
+                        comment.author_type, comment.author_name, comment.body
+                    ));
+                }
+                prompt.push('\n');
             }
-            prompt.push('\n');
         }
 
         if !context.comments.is_empty() {

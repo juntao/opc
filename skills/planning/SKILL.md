@@ -1,6 +1,6 @@
 ---
 name: opc-planner
-description: Plan and create projects and issues in OPC (One Person Company), an AI agent orchestration system. Use when the user wants to plan a project, break down a goal into tasks, create issues for AI agents, or set up a task dependency tree in OPC. Triggers on phrases like 'plan a project', 'break this down into tasks', 'create issues in OPC', 'set up the project in OPC', 'plan the work'.
+description: Plan and create projects and issues in OPC (One Person Company), an AI agent orchestration system. Use when the user wants to plan a project, break down a goal into tasks, create issues for AI agents, or set up a task dependency graph in OPC. Triggers on phrases like 'plan a project', 'break this down into tasks', 'create issues in OPC', 'set up the project in OPC', 'plan the work'.
 ---
 
 # OPC Project Planner
@@ -21,52 +21,59 @@ Ask the user for these if they haven't provided them.
 1. **Understand the goal.** Ask the user what they want to build. Discuss scope, priorities, and constraints.
 2. **List available agents.** Call the agents API to see who is available. Use each agent's `title`, `role`, and `capabilities` to understand what they can do.
 3. **Create a project.** Every planning session produces one project. Ask the user if they want to set a GitHub repo URL for the project (agents will automatically get git clone/branch/push instructions).
-4. **Break down the work.** Propose a set of issues with titles, descriptions, priorities, dependencies, and agent assignments. Present this as a tree showing parent-child relationships. Discuss with the user until the plan is solid.
-5. **Create the issues.** Once the user confirms, create all issues via the API. You MUST create parent issues before children, because you need the parent's returned `id` to set `parent_issue_id` on children.
+4. **Break down the work.** Propose a set of issues with titles, descriptions, priorities, dependencies, and agent assignments. Present this as a dependency graph showing which issues block which. Discuss with the user until the plan is solid.
+5. **Create the issues.** Once the user confirms, create all issues via the API. You MUST create blocking issues before the issues they block, because you need the blocker's returned `id` to include in the `blocked_by` array of downstream issues.
 
 Projects are created in **draft** status and all issues under a draft project are forced to **backlog**. Agents are NOT triggered automatically. The human reviews the plan in the OPC dashboard and **approves the project** to activate all root-level issues and dispatch agents.
 
-## Task Dependencies (Sub-Issues)
+## Task Dependencies (blocked_by)
 
-OPC supports parent-child issue hierarchies via `parent_issue_id`. This is how you model task dependencies:
+OPC uses a DAG (directed acyclic graph) dependency model via `blocked_by`. An issue can be blocked by **multiple** other issues and is only triggered when **all** of its blockers are resolved.
 
-- A **child issue** is only triggered after its **parent issue** is approved by the human.
-- When a parent is approved, all its children with assigned agents are automatically triggered.
-- The agent working on a child issue sees the parent's title and description as context.
-- Multiple children can share the same parent — they all start in parallel once the parent is approved.
+- An issue with `blocked_by: []` (or omitted) is a **root issue** — it starts immediately when the project is approved.
+- An issue with `blocked_by: ["uuid-A", "uuid-B"]` waits until BOTH issue A and issue B are completed and approved.
+- When an agent works on an issue, it sees the descriptions and comments from all completed blocking issues as context.
 
 ### Dependency patterns
 
-**Sequential chain** — A depends on B depends on C:
+**Sequential chain** — A must finish before B, B before C:
 ```
-Parent: "Write API spec"
-  └── Child: "Implement API endpoints" (parent_issue_id = parent's id)
-        └── Grandchild: "Write API tests" (parent_issue_id = child's id)
+Issue A: "Write API spec"          (blocked_by: [])
+Issue B: "Implement API endpoints" (blocked_by: [A])
+Issue C: "Write API tests"         (blocked_by: [B])
 ```
 
 **Fan-out** — Multiple tasks start after one is done:
 ```
-Parent: "Design system architecture"
-  ├── Child 1: "Build frontend" (parent_issue_id = parent's id)
-  ├── Child 2: "Build backend API" (parent_issue_id = parent's id)
-  └── Child 3: "Set up CI/CD" (parent_issue_id = parent's id)
+Issue A: "Design system architecture" (blocked_by: [])
+Issue B: "Build frontend"             (blocked_by: [A])
+Issue C: "Build backend API"          (blocked_by: [A])
+Issue D: "Set up CI/CD"               (blocked_by: [A])
 ```
 
-**Diamond** — Tasks converge then diverge:
+**Fan-in (convergence)** — One task waits for multiple prerequisites:
 ```
-Parent: "Write requirements doc"
-  ├── Child A: "Build auth service" (parent_issue_id = parent's id)
-  └── Child B: "Build user service" (parent_issue_id = parent's id)
+Issue A: "Build auth service"     (blocked_by: [])
+Issue B: "Build user service"     (blocked_by: [])
+Issue C: "Integration testing"    (blocked_by: [A, B])
 ```
-(For convergence, create a follow-up parent that depends on the last step, and assign integration work there.)
+This is the key capability — issue C only starts after BOTH A and B are approved.
+
+**Diamond** — Fan-out then fan-in:
+```
+Issue A: "Write requirements"      (blocked_by: [])
+Issue B: "Build frontend"          (blocked_by: [A])
+Issue C: "Build backend"           (blocked_by: [A])
+Issue D: "End-to-end testing"      (blocked_by: [B, C])
+```
 
 ### Creation order
 
-You MUST create issues in topological order (parents before children):
-1. Create all root-level issues (no `parent_issue_id`)
+You MUST create issues so that blockers exist before dependents reference them:
+1. Create all root-level issues (no `blocked_by`)
 2. Save their returned `id` values
-3. Create child issues, setting `parent_issue_id` to the parent's `id`
-4. Repeat for grandchildren, etc.
+3. Create dependent issues, setting `blocked_by` to the IDs of their prerequisites
+4. Continue in topological order until all issues are created
 
 ## API Reference
 
@@ -114,11 +121,11 @@ curl -s -X POST $OPC_API_URL/api/agent/issues \
     "priority": "high",
     "project_id": "project-uuid",
     "assignee_id": "agent-uuid",
-    "parent_issue_id": null
+    "blocked_by": ["blocker-uuid-1", "blocker-uuid-2"]
   }'
 ```
 
-Returns the created issue with its `id`. Save this `id` — you need it to create child issues.
+Returns the created issue with its `id`. Save this `id` — downstream issues need it in their `blocked_by` array.
 
 **Fields:**
 
@@ -129,13 +136,14 @@ Returns the created issue with its `id`. Save this `id` — you need it to creat
 | `priority` | No | `"low"`, `"medium"`, `"high"`, or `"critical"` (default: `"medium"`) |
 | `project_id` | No | Project UUID — all issues in a planning session should use the same project |
 | `assignee_id` | No | Agent UUID — which agent should work on this |
-| `parent_issue_id` | No | Parent issue UUID — makes this a sub-issue that is only triggered after the parent is approved |
+| `blocked_by` | No | Array of issue UUIDs that must be completed before this issue can start |
 
 ## Guidelines
 
-- **Write clear descriptions.** The description is the agent's primary context for the task. Include acceptance criteria, constraints, and relevant details. The agent does NOT see other sibling issues.
-- **Use dependencies for ordering.** If task B needs the output of task A, make B a child of A. The agent for B will see A's title and description as parent context.
+- **Write clear descriptions.** The description is the agent's primary context for the task. Include acceptance criteria, constraints, and relevant details. The agent also sees descriptions and comments from completed blocking issues.
+- **Use `blocked_by` for ordering.** If task B needs the output of task A, set `blocked_by: [A]` on B. The agent for B will see A's description and comments as context.
+- **Use fan-in for convergence.** When a task depends on multiple prerequisites, list all of them in `blocked_by`. The task only starts when ALL are done.
 - **Match agents to tasks.** Use each agent's `capabilities` to determine the best fit. A "Frontend Developer" should get UI tasks, not database migrations.
 - **Keep issues focused.** Each issue should be a single, well-scoped piece of work that one agent can complete in one session.
 - **All issues go to one project.** Every issue in a planning session should have the same `project_id`.
-- **Create parents first.** You need the parent's returned `id` before creating children. Never guess UUIDs.
+- **Create blockers first.** You need the blocker's returned `id` before creating dependents. Never guess UUIDs.

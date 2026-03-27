@@ -51,8 +51,10 @@ Agents calling `GET /api/agent/assignments` ONLY see issues with status `todo`, 
 
 ### Database Schema
 
-10 tables defined in `migrations/001_initial.sql`:
-companies, board_users, agents, agent_api_keys, projects, issues, issue_comments, approval_requests, heartbeat_runs, cost_events, activity_log
+11 tables defined across migrations:
+companies, board_users, agents, agent_api_keys, projects, issues, issue_dependencies, issue_comments, approval_requests, heartbeat_runs, cost_events, activity_log
+
+Issues use a DAG dependency model via `issue_dependencies` (many-to-many `blocked_by`). An issue can be blocked by multiple other issues and is only triggered when all blockers are resolved.
 
 ## Running
 

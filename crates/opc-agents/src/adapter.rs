@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use opc_core::domain::{Agent, Issue, IssueComment, Project};
+use opc_core::domain::{Agent, Issue, IssueComment, Project, ResolvedDependency};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -35,7 +35,7 @@ pub struct AgentTaskContext {
     pub issue: Issue,
     pub project: Option<Project>,
     pub comments: Vec<IssueComment>,
-    pub parent_chain: Vec<Issue>,
+    pub resolved_dependencies: Vec<ResolvedDependency>,
     pub available_agents: Vec<AgentSummary>,
     pub trigger: String,
     pub api_base_url: String,

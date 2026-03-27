@@ -38,12 +38,14 @@ pub async fn api_get(
         .await?
         .ok_or_else(|| anyhow::anyhow!("Issue not found"))?;
     let comments = queries::comments::list_comments(&state.pool, id).await?;
-    let children = queries::issues::get_children(&state.pool, id).await?;
+    let blocked_by = queries::issues::get_dependencies(&state.pool, id).await?;
+    let blocks = queries::issues::get_dependents(&state.pool, id).await?;
 
     Ok(Json(serde_json::json!({
         "issue": issue,
         "comments": comments,
-        "children": children,
+        "blocked_by": blocked_by,
+        "blocks": blocks,
     })))
 }
 
@@ -61,7 +63,14 @@ pub async fn api_create(
         false
     };
 
+    let blocked_by = input.blocked_by.clone();
+
     let issue = queries::issues::create_issue(&state.pool, &input).await?;
+
+    // Insert dependency edges
+    if !blocked_by.is_empty() {
+        queries::issues::add_dependencies(&state.pool, issue.id, &blocked_by).await?;
+    }
 
     state.event_bus.publish(OpcEvent::IssueCreated {
         issue_id: issue.id,
@@ -79,14 +88,25 @@ pub async fn api_create(
         return Ok(Json(issue));
     }
 
+    // Only trigger agent if all dependencies are already resolved
     if let Some(assignee_id) = issue.assignee_id {
-        state.event_bus.publish(OpcEvent::IssueAssigned {
-            issue_id: issue.id,
-            agent_id: assignee_id,
-            company_id: state.company_id,
-        });
+        let all_resolved =
+            queries::issues::are_all_dependencies_resolved(&state.pool, issue.id).await?;
+        if all_resolved {
+            state.event_bus.publish(OpcEvent::IssueAssigned {
+                issue_id: issue.id,
+                agent_id: assignee_id,
+                company_id: state.company_id,
+            });
+        } else {
+            // Has unresolved dependencies — stay in backlog
+            queries::issues::update_issue_status(&state.pool, issue.id, "backlog").await?;
+        }
     }
 
+    let issue = queries::issues::get_issue(&state.pool, issue.id)
+        .await?
+        .unwrap_or(issue);
     Ok(Json(issue))
 }
 

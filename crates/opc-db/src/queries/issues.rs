@@ -2,7 +2,7 @@ use opc_core::domain::{CreateIssue, Issue, UpdateIssue};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-const ISSUE_COLS: &str = "id, company_id, project_id, parent_issue_id, title, description, status, priority, assignee_id, checked_out_by, checked_out_at, approved_by, approved_at, created_at, updated_at";
+const ISSUE_COLS: &str = "id, company_id, project_id, title, description, status, priority, assignee_id, checked_out_by, checked_out_at, approved_by, approved_at, created_at, updated_at";
 
 pub async fn list_issues(
     pool: &PgPool,
@@ -34,13 +34,12 @@ pub async fn get_issue(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Issue>> {
 
 pub async fn create_issue(pool: &PgPool, input: &CreateIssue) -> sqlx::Result<Issue> {
     let q = format!(
-        "INSERT INTO issues (company_id, project_id, parent_issue_id, title, description, priority, assignee_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7::UUID IS NOT NULL THEN 'todo' ELSE 'backlog' END) RETURNING {}",
+        "INSERT INTO issues (company_id, project_id, title, description, priority, assignee_id, status) VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6::UUID IS NOT NULL THEN 'todo' ELSE 'backlog' END) RETURNING {}",
         ISSUE_COLS
     );
     sqlx::query_as::<_, Issue>(&q)
         .bind(input.company_id)
         .bind(input.project_id)
-        .bind(input.parent_issue_id)
         .bind(&input.title)
         .bind(&input.description)
         .bind(input.priority.as_deref().unwrap_or("medium"))
@@ -138,10 +137,26 @@ pub async fn approve_issue(
         .await
 }
 
-pub async fn get_parent_chain(pool: &PgPool, issue_id: Uuid) -> sqlx::Result<Vec<Issue>> {
+/// Insert dependency edges: `issue_id` is blocked by each ID in `depends_on_ids`.
+pub async fn add_dependencies(
+    pool: &PgPool,
+    issue_id: Uuid,
+    depends_on_ids: &[Uuid],
+) -> sqlx::Result<()> {
+    for dep_id in depends_on_ids {
+        sqlx::query("INSERT INTO issue_dependencies (issue_id, depends_on_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+            .bind(issue_id)
+            .bind(dep_id)
+            .execute(pool)
+            .await?;
+    }
+    Ok(())
+}
+
+/// Get issues that block this issue (direct dependencies).
+pub async fn get_dependencies(pool: &PgPool, issue_id: Uuid) -> sqlx::Result<Vec<Issue>> {
     let q = format!(
-        "WITH RECURSIVE ancestors AS (SELECT {} FROM issues WHERE id = $1 UNION ALL SELECT i.id, i.company_id, i.project_id, i.parent_issue_id, i.title, i.description, i.status, i.priority, i.assignee_id, i.checked_out_by, i.checked_out_at, i.approved_by, i.approved_at, i.created_at, i.updated_at FROM issues i JOIN ancestors a ON a.parent_issue_id = i.id) SELECT {} FROM ancestors WHERE id != $1 ORDER BY created_at ASC",
-        ISSUE_COLS,
+        "SELECT {} FROM issues WHERE id IN (SELECT depends_on_id FROM issue_dependencies WHERE issue_id = $1) ORDER BY created_at ASC",
         ISSUE_COLS
     );
     sqlx::query_as::<_, Issue>(&q)
@@ -150,13 +165,42 @@ pub async fn get_parent_chain(pool: &PgPool, issue_id: Uuid) -> sqlx::Result<Vec
         .await
 }
 
-pub async fn get_children(pool: &PgPool, parent_id: Uuid) -> sqlx::Result<Vec<Issue>> {
+/// Get issues that are blocked BY this issue (downstream dependents).
+pub async fn get_dependents(pool: &PgPool, issue_id: Uuid) -> sqlx::Result<Vec<Issue>> {
     let q = format!(
-        "SELECT {} FROM issues WHERE parent_issue_id = $1 ORDER BY created_at ASC",
+        "SELECT {} FROM issues WHERE id IN (SELECT issue_id FROM issue_dependencies WHERE depends_on_id = $1) ORDER BY created_at ASC",
         ISSUE_COLS
     );
     sqlx::query_as::<_, Issue>(&q)
-        .bind(parent_id)
+        .bind(issue_id)
+        .fetch_all(pool)
+        .await
+}
+
+/// Check if ALL dependencies of an issue are resolved (status = 'done' or 'approved').
+/// Returns true if the issue has zero dependencies OR all are resolved.
+pub async fn are_all_dependencies_resolved(pool: &PgPool, issue_id: Uuid) -> sqlx::Result<bool> {
+    let unresolved: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issue_dependencies d JOIN issues i ON i.id = d.depends_on_id WHERE d.issue_id = $1 AND i.status NOT IN ('done', 'approved')",
+    )
+    .bind(issue_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(unresolved == 0)
+}
+
+/// Get all resolved (done/approved) issues in the transitive dependency graph.
+/// Walks the DAG upward via recursive CTE.
+pub async fn get_resolved_dependency_chain(
+    pool: &PgPool,
+    issue_id: Uuid,
+) -> sqlx::Result<Vec<Issue>> {
+    let q = format!(
+        "WITH RECURSIVE dep_chain AS (SELECT depends_on_id AS id FROM issue_dependencies WHERE issue_id = $1 UNION SELECT d.depends_on_id FROM issue_dependencies d JOIN dep_chain dc ON dc.id = d.issue_id) SELECT {} FROM issues WHERE id IN (SELECT id FROM dep_chain) AND status IN ('done', 'approved') ORDER BY created_at ASC",
+        ISSUE_COLS
+    );
+    sqlx::query_as::<_, Issue>(&q)
+        .bind(issue_id)
         .fetch_all(pool)
         .await
 }
